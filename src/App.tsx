@@ -766,7 +766,7 @@ export default function App() {
   const handleExportJson = () => {
     const projectData: FlowProjectExport = {
       version: '1.0.0',
-      appName: 'NodeFlow Project',
+      appName: 'ModuLoom Project',
       exportedAt: new Date().toISOString(),
       nodes,
       connections,
@@ -781,7 +781,7 @@ export default function App() {
     const link = document.createElement('a');
     const dateStr = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = `nodeflow-graph-${dateStr}.json`;
+    link.download = `moduloom-graph-${dateStr}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

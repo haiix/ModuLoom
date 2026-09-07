@@ -90,7 +90,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-bold text-sm text-slate-900 dark:text-slate-100 tracking-tight">
-                NodeFlow
+                ModuLoom
               </span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-200 dark:border-indigo-800">
                 Pure Functions

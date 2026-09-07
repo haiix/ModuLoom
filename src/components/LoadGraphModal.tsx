@@ -44,12 +44,12 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
         }
 
         if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.connections)) {
-          throw new Error('NodeFlowのプロジェクト形式ではありません（nodes または connections 配列が見つかりません）。');
+          throw new Error('ModuLoomのプロジェクト形式ではありません（nodes または connections 配列が見つかりません）。');
         }
 
         const project: FlowProjectExport = {
           version: parsed.version || '1.0.0',
-          appName: parsed.appName || 'NodeFlow Project',
+          appName: parsed.appName || 'ModuLoom Project',
           exportedAt: parsed.exportedAt || new Date().toISOString(),
           nodes: parsed.nodes,
           connections: parsed.connections,

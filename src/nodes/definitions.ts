@@ -48,7 +48,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     outputs: [
       { id: 'value', name: 'value', type: 'string', defaultValue: 'Hello World' },
     ],
-    defaultState: { value: 'Hello NodeFlow' },
+    defaultState: { value: 'Hello ModuLoom' },
     evaluate: (_inputs, state) => {
       return { value: String(state?.value ?? '') };
     },
@@ -99,7 +99,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     outputs: [
       { id: 'value', name: 'value', type: 'object', defaultValue: { id: 1, name: 'Sample' } },
     ],
-    defaultState: { rawJson: '{\n  "name": "NodeFlow",\n  "version": 1.0,\n  "pure": true\n}' },
+    defaultState: { rawJson: '{\n  "name": "ModuLoom",\n  "version": 1.0,\n  "pure": true\n}' },
     evaluate: (_inputs, state) => {
       try {
         const parsed = JSON.parse(state?.rawJson || '{}');
@@ -275,7 +275,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     inputs: [
       { id: 'template', name: 'template', type: 'string', defaultValue: '{a} さん、{b} へようこそ！' },
       { id: 'a', name: 'a', type: 'string', defaultValue: '山田' },
-      { id: 'b', name: 'b', type: 'string', defaultValue: 'NodeFlow' },
+      { id: 'b', name: 'b', type: 'string', defaultValue: 'ModuLoom' },
     ],
     outputs: [
       { id: 'result', name: 'result', type: 'string' },
@@ -821,7 +821,7 @@ export const PRESETS: GraphPreset[] = [
     description: '入力文字列をテンプレートに流し込み、大文字変換してフォーマット結果を出力',
     nodes: [
       { id: 'n-txt-name', typeId: 'input/text', x: 80, y: 120, state: { value: 'Sato Taro' }, customLabel: 'ユーザー名' },
-      { id: 'n-txt-proj', typeId: 'input/text', x: 80, y: 300, state: { value: 'NodeFlow Core' }, customLabel: 'プロジェクト名' },
+      { id: 'n-txt-proj', typeId: 'input/text', x: 80, y: 300, state: { value: 'ModuLoom Core' }, customLabel: 'プロジェクト名' },
       { id: 'n-tpl', typeId: 'string/template', x: 420, y: 160, customLabel: 'テンプレート置換' },
       { id: 'n-upper', typeId: 'string/uppercase', x: 740, y: 160, customLabel: '大文字変換' },
       { id: 'n-len', typeId: 'string/length', x: 740, y: 360, customLabel: '文字数カウント' },

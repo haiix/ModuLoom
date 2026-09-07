@@ -1,5 +1,5 @@
 /**
- * Stream & AsyncIterator Utilities for NodeFlow
+ * Stream & AsyncIterator Utilities for ModuLoom
  * Provides AsyncIterable primitives, stream transformations, and stream consumers.
  */
 

@@ -662,7 +662,7 @@ export function generateTypeScriptCode(
   const inputNodes = nodes.filter(n => definitions.get(n.typeId)?.kind === 'input');
   const outputNodes = nodes.filter(n => definitions.get(n.typeId)?.kind === 'output');
 
-  let ts = `/**\n * Auto-generated Pure Function Pipeline\n * Built with NodeFlow Type-Safe Node Editor\n */\n\n`;
+  let ts = `/**\n * Auto-generated Pure Function Pipeline\n * Built with ModuLoom Type-Safe Node Editor\n */\n\n`;
 
   // Include Stream and Promise helpers if needed
   if (hasAsyncOrStream) {
