@@ -7,9 +7,7 @@ npm install
 npm run dev
 ```
 
-開発サーバーはポート3000、ホスト `0.0.0.0` で起動します。`DISABLE_HMR=true` の場合、Vite の HMR とファイル監視を無効にします。
-
-現行コードは `.env.example` の `GEMINI_API_KEY`、`APP_URL` を参照しません。環境変数ファイルを作らなくてもフロントエンドを起動できます。
+開発サーバーはポート3000、ホスト `0.0.0.0` で起動します。環境変数ファイルは不要です。
 
 TypeScript は `typescript-eslint` の対応範囲に合わせ、6系の最新互換版を使用します。TypeScript 7へ更新する際は、`typescript-eslint` が7系を正式対応してから両方を同時に更新してください。
 
@@ -148,12 +146,7 @@ npm run test:watch
 
 ## コーディング上の注意
 
-- パスエイリアス `@/*` はリポジトリルートを指します。
 - TypeScript は `noEmit`、`isolatedModules`、bundler module resolution を使用します。
 - `skipLibCheck` が有効で、`strict` は明示されていません。
 - React は `StrictMode` で起動します。副作用は再実行されても安全にしてください。
 - UIは Tailwind CSS のユーティリティクラスとダークモードクラスを使用します。
-
-## 依存関係について
-
-ソースコードから直接利用されている主な依存は React、React DOM、Vite、Tailwind CSS、Lucide React です。`@google/genai`、Express、dotenv、Motion、および一部の型パッケージは現行ソースから参照されていません。削除するか将来機能の予定を明記するかは、プロジェクト方針の確認が必要です。

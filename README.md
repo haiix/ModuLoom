@@ -34,7 +34,7 @@ npm run dev
 
 開発サーバーは `http://localhost:3000` で起動します。外部ホストからも接続できるよう、Vite は `0.0.0.0` をリッスンします。
 
-本アプリの現行機能はクライアント内で完結しており、起動に環境変数は不要です。`.env.example` の `GEMINI_API_KEY` と `APP_URL` は現在のソースコードから参照されていません。
+本アプリの機能はクライアント内で完結しており、起動に環境変数は不要です。
 
 ## 基本的な使い方
 
@@ -60,9 +60,9 @@ npm run dev
 | `npm run format:check` | Prettier の整形差分を検査             |
 | `npm test`             | Vitest のテストを1回実行              |
 | `npm run test:watch`   | Vitest を監視モードで起動             |
-| `npm run clean`        | `dist` と `server.js` を削除          |
+| `npm run clean`        | `dist` を削除                         |
 
-`clean` は Unix 系の `rm` を使用しているため、標準の Windows PowerShell ではそのまま動作しない場合があります。
+`clean` は Node.js のファイルシステムAPIを使用するため、各対応OSで実行できます。
 
 ## ドキュメント
 

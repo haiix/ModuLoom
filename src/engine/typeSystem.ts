@@ -25,35 +25,6 @@ export function isTypeCompatible(
 }
 
 /**
- * Returns human-friendly type display
- */
-export function getTypeName(type: DataType, customTypes?: CustomTypeDefinition[]): string {
-  const custom = customTypes?.find((ct) => ct.id === type || ct.name === type);
-  if (custom) return `${custom.name} (カスタム型)`;
-
-  switch (type) {
-    case 'number':
-      return 'Number (数値)';
-    case 'string':
-      return 'String (文字列)';
-    case 'boolean':
-      return 'Boolean (真偽値)';
-    case 'array':
-      return 'Array (配列)';
-    case 'object':
-      return 'Object (オブジェクト)';
-    case 'promise':
-      return 'Promise (非同期値)';
-    case 'stream':
-      return 'Stream (AsyncIterator)';
-    case 'any':
-      return 'Any (任意)';
-    default:
-      return type;
-  }
-}
-
-/**
  * Detect runtime type of a value
  */
 export function detectValueType(value: any): DataType {

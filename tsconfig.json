@@ -1,8 +1,6 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
@@ -10,12 +8,7 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "types": ["vite/client"],
-    "allowJs": true,
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": ["./*"]
-    },
-    "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": ["src", "tests", "vite.config.ts"],

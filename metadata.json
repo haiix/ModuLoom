@@ -1,6 +1,0 @@
-{
-  "name": "ModuLoom - Pure Function Editor",
-  "description": "A visual programming node editor based on pure functions with strict TypeScript type safety, DAG cycle detection, and reactive evaluation.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
