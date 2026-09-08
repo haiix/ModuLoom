@@ -18,6 +18,8 @@ import {
   Download,
   Upload,
   Zap,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -46,6 +48,11 @@ interface ToolbarProps {
   onResetZoom: () => void;
   onFitView: () => void;
   nodeCount?: number;
+  canUndo: boolean;
+  canRedo: boolean;
+  isDirty: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -70,6 +77,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onResetZoom,
   onFitView,
   nodeCount = 0,
+  canUndo,
+  canRedo,
+  isDirty,
+  onUndo,
+  onRedo,
 }) => {
   const [showTypeLegend, setShowTypeLegend] = useState(false);
   const [showPresetsMenu, setShowPresetsMenu] = useState(false);
@@ -137,6 +149,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <span className="hidden md:inline">読み込み</span>
           </button>
         </div>
+
+        <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="p-1.5 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="元に戻す [Ctrl/Cmd+Z]"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className="border-l border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="やり直す [Ctrl/Cmd+Shift+Z / Ctrl+Y]"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {isDirty && (
+          <span
+            className="hidden items-center gap-1 text-[10px] font-medium text-amber-600 lg:inline-flex dark:text-amber-400"
+            title="保存後に変更があります"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            未保存
+          </span>
+        )}
 
         {/* Preset Selector Dropdown */}
         <div className="relative">

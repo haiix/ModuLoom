@@ -93,6 +93,8 @@ npm run preview
 
 位置と `customLabel` は評価結果に影響しないものとして差分判定から除外されています。評価ロジックに影響する値は必ず `state` に置いてください。
 
+編集操作は `EditorDocument` を `commitEditorDocument` へ渡して履歴化します。複数のstate setterで1つの操作を分割せず、ノードと接続を同時に変える削除・置換は1つのドキュメント更新にまとめてください。マウス移動のような連続更新にはグループ化キーを使い、操作終了時に `finishEditorHistoryGroup` を呼びます。パンとズームなど保存対象外の表示状態は編集履歴へ含めません。
+
 ## カスタム型を拡張する
 
 カスタム型由来ノードは `generateNodesForCustomType` が生成します。型検証の現行仕様は必須フィールドの存在確認だけです。型ごとの厳密な実行時検証を追加する場合は、配列、Promise、Stream、`null` の扱いを `typeSystem.detectValueType` と整合させてください。

@@ -21,6 +21,7 @@ interface CanvasProps {
   stepActiveNodeId?: string | null;
   customTypes?: CustomTypeDefinition[];
   onUpdateNodePosition: (id: string, x: number, y: number) => void;
+  onFinishNodeDrag?: () => void;
   onUpdateNodeState: (id: string, newState: any) => void;
   onUpdateNodeLabel: (id: string, newLabel: string) => void;
   onDeleteNode: (id: string) => void;
@@ -52,6 +53,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   stepActiveNodeId,
   customTypes = [],
   onUpdateNodePosition,
+  onFinishNodeDrag,
   onUpdateNodeState,
   onUpdateNodeLabel,
   onDeleteNode,
@@ -289,15 +291,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
-    // Remove any existing connection to this specific input port (Constraint: 1 input has max 1 connection)
-    const existingConn = connections.find(
-      (c) => c.toNodeId === toNodeId && c.toPortId === toPortId,
-    );
-    if (existingConn) {
-      onDeleteConnection(existingConn.id);
-    }
-
-    // Add new connection!
+    // Add new connection; the parent replaces any existing wire to this input atomically.
     const newConn: Connection = {
       id: `conn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       fromNodeId: draggingWire.fromNodeId,
@@ -392,12 +386,23 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Mouse Up: Stop dragging or panning
   const handleMouseUp = () => {
     setIsPanning(false);
+    if (draggingNode) onFinishNodeDrag?.();
     setDraggingNode(null);
     if (draggingWire) {
       setDraggingWire(null);
       setWireHoverHint(null);
     }
   };
+
+  useEffect(() => {
+    if (!draggingNode) return;
+    const finishDragOutsideCanvas = () => {
+      onFinishNodeDrag?.();
+      setDraggingNode(null);
+    };
+    window.addEventListener('mouseup', finishDragOutsideCanvas);
+    return () => window.removeEventListener('mouseup', finishDragOutsideCanvas);
+  }, [draggingNode, onFinishNodeDrag]);
 
   // Compute Bezier Curve Path
   const getBezierPath = (x1: number, y1: number, x2: number, y2: number): string => {

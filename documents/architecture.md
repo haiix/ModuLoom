@@ -140,7 +140,9 @@ type BuiltinDataType =
 
 ## 状態管理と永続化
 
-グラフとUI状態は `App` の React state にあります。状態管理ライブラリは使っていません。ブラウザ更新で作業状態は失われます。
+グラフ、接続、カスタム定義、カスタム型は `EditorDocument` としてまとめ、`EditorHistory` が過去・現在・未来のスナップショットを管理します。各編集はドキュメント全体へ原子的に適用されるため、ノード削除、全消去、プリセット適用、読み込みも1回のUndoで戻せます。ドラッグ中の座標更新はグループ化キーで1操作にまとめます。パンとズームはUI状態として履歴および未保存判定から除外します。
+
+保存時のドキュメント指紋と現在値を比較して未保存状態を判定します。未保存中は `beforeunload` でページ離脱を警告します。状態管理ライブラリは使っていません。ブラウザ更新で作業状態は失われます。
 
 永続化はダウンロードする JSON のみです。関数はJSON化できないため、自作ノードは `customCode`、複合ノードは `compositeSubgraph` を保存します。読み込み時は `projectFormat.ts` が形式とグラフ整合性を検証し、自作ノードの `customCode` から `evaluate` 関数を再構成します。複合ノードは評価エンジンがサブグラフを直接扱います。
 
@@ -153,6 +155,7 @@ type BuiltinDataType =
 | `src/engine/dagEngine.ts`       | DAG 操作、同期・非同期評価、複合評価、TS生成 |
 | `src/engine/typeSystem.ts`      | 型互換性、値型判定、表示整形                 |
 | `src/engine/streamEngine.ts`    | Promise／AsyncIterator ヘルパー              |
+| `src/engine/editorHistory.ts`   | 編集履歴、Undo／Redo、未保存判定             |
 | `src/nodes/definitions.ts`      | 同期組み込みノードとプリセット               |
 | `src/nodes/asyncStreamNodes.ts` | 非同期・ストリームノード                     |
 | `src/nodes/customTypeNodes.ts`  | カスタム型由来ノードとコード生成定義         |
