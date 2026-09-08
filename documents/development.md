@@ -101,7 +101,7 @@ npm run preview
 
 接続時の型互換性は `src/engine/typeSystem.ts` の `isTypeCompatible`、循環チェックは `src/engine/dagEngine.ts` の `wouldCreateCycle` にあります。
 
-UIだけでなく、外部JSONを読み込む経路も考慮してください。現在の読み込み処理は接続の厳密なバリデーションを行わないため、ルールを強化する場合は読み込み時検証の追加も推奨します。
+UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ接続ルールへ更新してください。
 
 ## 評価エンジンを変更する
 
@@ -122,7 +122,7 @@ UIだけでなく、外部JSONを読み込む経路も考慮してください�
 
 保存形式の型は `FlowProjectExport`、書き出しは `App.tsx` の `handleExportJson`、読み込みは `LoadGraphModal.tsx` と `handleLoadProject` にあります。
 
-`version` を上げる場合は、旧形式の読み込み方針とマイグレーションを同時に実装してください。現状はバージョン文字列を保存するだけで、分岐には利用していません。
+`version` を上げる場合は、`src/engine/projectFormat.ts` のマイグレーション表へ旧形式からの変換を追加し、往復テストも更新してください。未対応バージョンは適用前に拒否されます。
 
 ## テスト
 
