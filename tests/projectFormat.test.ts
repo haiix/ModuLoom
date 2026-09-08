@@ -127,6 +127,8 @@ function createCompositeRoundTripProject(): FlowProjectExport {
       ],
       inputNodeIds: ['inner-input'],
       outputNodeIds: ['inner-output'],
+      inputPortMappings: [{ externalPortId: 'x', internalNodeId: 'inner-input' }],
+      outputPortMappings: [{ externalPortId: 'result', internalNodeId: 'inner-output' }],
     },
     evaluate: () => ({}),
   };
@@ -200,6 +202,9 @@ describe('project file round trip', () => {
     const result = evaluateGraph(loaded.nodes, loaded.connections, definitions);
 
     expect(result.output.outputs.displayedValue).toBe(10);
+    expect(loaded.customDefinitions![0].compositeSubgraph?.inputPortMappings).toEqual([
+      { externalPortId: 'x', internalNodeId: 'inner-input' },
+    ]);
   });
 });
 

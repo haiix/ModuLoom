@@ -69,6 +69,7 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
 
     // Build reverse adjacency list (toNodeId -> fromNodeId)
     const revAdj = new Map<string, Set<string>>();
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
     for (const c of connections) {
       if (!revAdj.has(c.toNodeId)) revAdj.set(c.toNodeId, new Set<string>());
       revAdj.get(c.toNodeId)!.add(c.fromNodeId);
@@ -83,6 +84,7 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
 
     while (queueUp.length > 0) {
       const curr = queueUp.shift()!;
+      if (nodeById.get(curr)?.typeId === 'composite/input-port') continue;
       const prevs = revAdj.get(curr);
       if (prevs) {
         for (const p of prevs) {
@@ -218,6 +220,14 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
       connections: JSON.parse(JSON.stringify(subgraphConnections)),
       inputNodeIds: connectedInputTerminals.map((n) => n.id),
       outputNodeIds: outputTerminalNodes.map((n) => n.id),
+      inputPortMappings: inputPorts.map((port, index) => ({
+        externalPortId: port.id,
+        internalNodeId: connectedInputTerminals[index].id,
+      })),
+      outputPortMappings: outputPorts.map((port, index) => ({
+        externalPortId: port.id,
+        internalNodeId: outputTerminalNodes[index].id,
+      })),
     };
 
     const newDef: NodeDefinition = {

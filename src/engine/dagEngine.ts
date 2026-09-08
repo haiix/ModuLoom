@@ -227,14 +227,21 @@ export function evaluateCompositeNode(
   const internalNodes: NodeInstance[] = JSON.parse(JSON.stringify(subgraph.nodes));
   const internalConnections: Connection[] = JSON.parse(JSON.stringify(subgraph.connections));
 
+  const externalInputPortByNodeId = new Map(
+    subgraph.inputPortMappings?.map(({ externalPortId, internalNodeId }) => [
+      internalNodeId,
+      externalPortId,
+    ]),
+  );
+
   // Map external inputs to composite/input-port terminal nodes
   for (const node of internalNodes) {
     if (node.typeId === 'composite/input-port') {
-      const portName = node.state?.portName || 'x';
-      if (portName in externalInputs && externalInputs[portName] !== undefined) {
+      const externalPortId = externalInputPortByNodeId.get(node.id) ?? node.state?.portName ?? 'x';
+      if (externalPortId in externalInputs && externalInputs[externalPortId] !== undefined) {
         node.state = {
           ...node.state,
-          testValue: externalInputs[portName],
+          testValue: externalInputs[externalPortId],
         };
       }
     }
@@ -245,12 +252,19 @@ export function evaluateCompositeNode(
 
   // Collect outputs from composite/output-port terminal nodes
   const outputs: Record<string, any> = {};
+  const externalOutputPortByNodeId = new Map(
+    subgraph.outputPortMappings?.map(({ externalPortId, internalNodeId }) => [
+      internalNodeId,
+      externalPortId,
+    ]),
+  );
   for (const node of internalNodes) {
     if (node.typeId === 'composite/output-port') {
       const portName = node.state?.portName || 'result';
+      const externalPortId = externalOutputPortByNodeId.get(node.id) ?? portName;
       const nodeRes = internalEval[node.id];
       const val = nodeRes?.inputs?.in ?? nodeRes?.outputs?.out ?? nodeRes?.outputs?.[portName];
-      outputs[portName] = val;
+      outputs[externalPortId] = val;
     }
   }
 
@@ -268,13 +282,20 @@ export async function evaluateCompositeNodeAsync(
   const internalNodes: NodeInstance[] = JSON.parse(JSON.stringify(subgraph.nodes));
   const internalConnections: Connection[] = JSON.parse(JSON.stringify(subgraph.connections));
 
+  const externalInputPortByNodeId = new Map(
+    subgraph.inputPortMappings?.map(({ externalPortId, internalNodeId }) => [
+      internalNodeId,
+      externalPortId,
+    ]),
+  );
+
   for (const node of internalNodes) {
     if (node.typeId === 'composite/input-port') {
-      const portName = node.state?.portName || 'x';
-      if (portName in externalInputs && externalInputs[portName] !== undefined) {
+      const externalPortId = externalInputPortByNodeId.get(node.id) ?? node.state?.portName ?? 'x';
+      if (externalPortId in externalInputs && externalInputs[externalPortId] !== undefined) {
         node.state = {
           ...node.state,
-          testValue: externalInputs[portName],
+          testValue: externalInputs[externalPortId],
         };
       }
     }
@@ -283,16 +304,159 @@ export async function evaluateCompositeNodeAsync(
   const internalEval = await evaluateGraphAsync(internalNodes, internalConnections, definitions);
 
   const outputs: Record<string, any> = {};
+  const externalOutputPortByNodeId = new Map(
+    subgraph.outputPortMappings?.map(({ externalPortId, internalNodeId }) => [
+      internalNodeId,
+      externalPortId,
+    ]),
+  );
   for (const node of internalNodes) {
     if (node.typeId === 'composite/output-port') {
       const portName = node.state?.portName || 'result';
+      const externalPortId = externalOutputPortByNodeId.get(node.id) ?? portName;
       const nodeRes = internalEval[node.id];
       const val = nodeRes?.inputs?.in ?? nodeRes?.outputs?.out ?? nodeRes?.outputs?.[portName];
-      outputs[portName] = val;
+      outputs[externalPortId] = val;
     }
   }
 
   return outputs;
+}
+
+export interface UnpackCompositeResult {
+  nodes: NodeInstance[];
+  connections: Connection[];
+  warnings: string[];
+}
+
+function allocateUniqueId(base: string, occupiedIds: Set<string>): string {
+  let candidate = base;
+  let suffix = 2;
+  while (occupiedIds.has(candidate)) {
+    candidate = `${base}_${suffix}`;
+    suffix += 1;
+  }
+  occupiedIds.add(candidate);
+  return candidate;
+}
+
+/**
+ * Replaces one composite instance with cloned internal nodes while preserving its external edges.
+ * Invalid boundary mappings are returned as warnings and their affected edges are omitted.
+ */
+export function unpackCompositeNode(
+  nodes: NodeInstance[],
+  connections: Connection[],
+  nodeId: string,
+  definition: NodeDefinition,
+): UnpackCompositeResult {
+  const compositeNode = nodes.find(({ id }) => id === nodeId);
+  if (!compositeNode || !definition.isComposite || !definition.compositeSubgraph) {
+    throw new Error(`複合ノード '${nodeId}' を展開できません。`);
+  }
+
+  const subgraph = definition.compositeSubgraph;
+  if (subgraph.nodes.length === 0) {
+    throw new Error(`複合ノード '${nodeId}' の内部グラフが空です。`);
+  }
+
+  const minX = Math.min(...subgraph.nodes.map(({ x }) => x));
+  const minY = Math.min(...subgraph.nodes.map(({ y }) => y));
+  const occupiedNodeIds = new Set(nodes.map(({ id }) => id));
+  occupiedNodeIds.delete(nodeId);
+  const idMap = new Map<string, string>();
+  const unpackedNodes = subgraph.nodes.map((node) => {
+    const newId = allocateUniqueId(`${nodeId}__${node.id}`, occupiedNodeIds);
+    idMap.set(node.id, newId);
+    return {
+      ...JSON.parse(JSON.stringify(node)),
+      id: newId,
+      x: compositeNode.x + (node.x - minX),
+      y: compositeNode.y + (node.y - minY),
+    };
+  });
+
+  const occupiedConnectionIds = new Set(connections.map(({ id }) => id));
+  const unpackedConnections = subgraph.connections.map((connection) => ({
+    ...connection,
+    id: allocateUniqueId(`${nodeId}__${connection.id}`, occupiedConnectionIds),
+    fromNodeId: idMap.get(connection.fromNodeId)!,
+    toNodeId: idMap.get(connection.toNodeId)!,
+  }));
+  const inputMappings =
+    subgraph.inputPortMappings ??
+    definition.inputs.map((port, index) => ({
+      externalPortId: port.id,
+      internalNodeId: subgraph.inputNodeIds[index],
+    }));
+  const outputMappings =
+    subgraph.outputPortMappings ??
+    definition.outputs.map((port, index) => ({
+      externalPortId: port.id,
+      internalNodeId: subgraph.outputNodeIds[index],
+    }));
+  const warnings: string[] = [];
+  const externalConnections: Connection[] = [];
+
+  for (const connection of connections) {
+    if (connection.fromNodeId !== nodeId && connection.toNodeId !== nodeId) {
+      externalConnections.push(connection);
+      continue;
+    }
+    if (connection.fromNodeId === nodeId && connection.toNodeId === nodeId) {
+      warnings.push(`接続 '${connection.id}': 複合ノード自身への接続は復元できません。`);
+      continue;
+    }
+
+    if (connection.toNodeId === nodeId) {
+      const mapping = inputMappings.find(
+        ({ externalPortId }) => externalPortId === connection.toPortId,
+      );
+      const internalNode = mapping
+        ? subgraph.nodes.find(({ id }) => id === mapping.internalNodeId)
+        : undefined;
+      const remappedNodeId = mapping ? idMap.get(mapping.internalNodeId) : undefined;
+      if (!mapping || !remappedNodeId || internalNode?.typeId !== 'composite/input-port') {
+        warnings.push(
+          `接続 '${connection.id}': 入力ポート '${connection.toPortId}' の内部端子が見つかりません。`,
+        );
+        continue;
+      }
+      externalConnections.push({
+        ...connection,
+        id: allocateUniqueId(`${nodeId}__external__${connection.id}`, occupiedConnectionIds),
+        toNodeId: remappedNodeId,
+        toPortId: 'in',
+      });
+      continue;
+    }
+
+    const mapping = outputMappings.find(
+      ({ externalPortId }) => externalPortId === connection.fromPortId,
+    );
+    const internalNode = mapping
+      ? subgraph.nodes.find(({ id }) => id === mapping.internalNodeId)
+      : undefined;
+    const remappedNodeId = mapping ? idMap.get(mapping.internalNodeId) : undefined;
+    if (!mapping || !remappedNodeId || internalNode?.typeId !== 'composite/output-port') {
+      warnings.push(
+        `接続 '${connection.id}': 出力ポート '${connection.fromPortId}' の内部端子が見つかりません。`,
+      );
+      continue;
+    }
+    externalConnections.push({
+      ...connection,
+      id: allocateUniqueId(`${nodeId}__external__${connection.id}`, occupiedConnectionIds),
+      fromNodeId: remappedNodeId,
+      fromPortId: 'out',
+    });
+  }
+
+  return {
+    nodes: [...nodes.filter(({ id }) => id !== nodeId), ...unpackedNodes],
+    connections: [...externalConnections, ...unpackedConnections],
+    warnings,
+  };
 }
 
 /**

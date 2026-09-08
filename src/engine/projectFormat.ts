@@ -1,5 +1,6 @@
 import type {
   Connection,
+  CompositePortMapping,
   CustomTypeDefinition,
   FlowProjectExport,
   NodeDefinition,
@@ -138,6 +139,14 @@ function parseConnection(value: unknown, path: string): Connection {
   };
 }
 
+function parseCompositePortMapping(value: unknown, path: string): CompositePortMapping {
+  const mapping = expectRecord(value, path);
+  return {
+    externalPortId: expectString(mapping.externalPortId, `${path}.externalPortId`),
+    internalNodeId: expectString(mapping.internalNodeId, `${path}.internalNodeId`),
+  };
+}
+
 function parseCustomType(value: unknown, path: string): CustomTypeDefinition {
   const customType = expectRecord(value, path);
   const fields = expectArray(customType.fields, `${path}.fields`).map((fieldValue, index) => {
@@ -214,6 +223,32 @@ function parseCustomDefinition(value: unknown, path: string): NodeDefinition {
         subgraph.outputNodeIds,
         `${path}.compositeSubgraph.outputNodeIds`,
       ).map((id, index) => expectString(id, `${path}.compositeSubgraph.outputNodeIds[${index}]`)),
+      ...(subgraph.inputPortMappings === undefined
+        ? {}
+        : {
+            inputPortMappings: expectArray(
+              subgraph.inputPortMappings,
+              `${path}.compositeSubgraph.inputPortMappings`,
+            ).map((mapping, index) =>
+              parseCompositePortMapping(
+                mapping,
+                `${path}.compositeSubgraph.inputPortMappings[${index}]`,
+              ),
+            ),
+          }),
+      ...(subgraph.outputPortMappings === undefined
+        ? {}
+        : {
+            outputPortMappings: expectArray(
+              subgraph.outputPortMappings,
+              `${path}.compositeSubgraph.outputPortMappings`,
+            ).map((mapping, index) =>
+              parseCompositePortMapping(
+                mapping,
+                `${path}.compositeSubgraph.outputPortMappings[${index}]`,
+              ),
+            ),
+          }),
     };
   }
 
@@ -466,6 +501,65 @@ export function parseFlowProject(input: unknown): FlowProjectExport {
         );
       }
     }
+
+    const validateMappings = (
+      mappings: CompositePortMapping[] | undefined,
+      ports: Port[],
+      terminalNodeIds: Set<string>,
+      mappingName: 'inputPortMappings' | 'outputPortMappings',
+    ) => {
+      if (!mappings) return;
+      if (mappings.length !== ports.length) {
+        fail(
+          `${subgraphPath}.${mappingName}`,
+          `外部ポート数 ${ports.length} とマッピング数 ${mappings.length} が一致しません。`,
+        );
+      }
+      const externalPortIds = new Set<string>();
+      const internalNodeIds = new Set<string>();
+      for (const [mappingIndex, mapping] of mappings.entries()) {
+        const mappingPath = `${subgraphPath}.${mappingName}[${mappingIndex}]`;
+        if (!ports.some(({ id }) => id === mapping.externalPortId)) {
+          fail(
+            `${mappingPath}.externalPortId`,
+            `外部ポート '${mapping.externalPortId}' が存在しません。`,
+          );
+        }
+        if (!terminalNodeIds.has(mapping.internalNodeId)) {
+          fail(
+            `${mappingPath}.internalNodeId`,
+            `対応する内部端子 '${mapping.internalNodeId}' が存在しません。`,
+          );
+        }
+        if (externalPortIds.has(mapping.externalPortId)) {
+          fail(
+            `${mappingPath}.externalPortId`,
+            `外部ポート '${mapping.externalPortId}' が重複しています。`,
+          );
+        }
+        if (internalNodeIds.has(mapping.internalNodeId)) {
+          fail(
+            `${mappingPath}.internalNodeId`,
+            `内部端子 '${mapping.internalNodeId}' が重複しています。`,
+          );
+        }
+        externalPortIds.add(mapping.externalPortId);
+        internalNodeIds.add(mapping.internalNodeId);
+      }
+    };
+
+    validateMappings(
+      subgraph.inputPortMappings,
+      definition.inputs,
+      inputNodeIds,
+      'inputPortMappings',
+    );
+    validateMappings(
+      subgraph.outputPortMappings,
+      definition.outputs,
+      outputNodeIds,
+      'outputPortMappings',
+    );
   }
 
   let viewport = DEFAULT_VIEWPORT;

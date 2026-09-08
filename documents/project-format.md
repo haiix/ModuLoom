@@ -115,6 +115,23 @@ interface CustomTypeDefinition {
 - 自作ノード: `customCode` の構文を検証し、先頭の出力ポートへ結果を返す評価関数を復元する
 - 複合ノード: `compositeSubgraph` を評価エンジンが直接実行するため、JSON読み込み後も評価可能
 
+複合ノードの `compositeSubgraph` は内部の `nodes`、`connections`、`inputNodeIds`、`outputNodeIds` に加え、次の境界対応を保存します。
+
+```ts
+interface CompositePortMapping {
+  externalPortId: string;
+  internalNodeId: string;
+}
+
+interface CompositeSubgraph {
+  // nodes, connections, inputNodeIds, outputNodeIds ...
+  inputPortMappings?: CompositePortMapping[];
+  outputPortMappings?: CompositePortMapping[];
+}
+```
+
+対応情報は複数の入出力や同名端子を一意に扱い、展開時に外部接続を Group Input／Group Output へ復元するために使います。対応情報がない旧ファイルは、外部ポートと端子ID配列の順序で復元します。
+
 保存JSONを直接編集する場合、`customCode` は実行可能な JavaScript として扱われることに注意してください。構文検証は行いますがサンドボックス化はされないため、信頼できるファイルだけを読み込んでください。
 
 ## viewport
