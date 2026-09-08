@@ -137,7 +137,7 @@ type BuiltinDataType =
 
 グラフとUI状態は `App` の React state にあります。状態管理ライブラリは使っていません。ブラウザ更新で作業状態は失われます。
 
-永続化はダウンロードする JSON のみです。関数はJSON化できないため、自作ノードは `customCode`、複合ノードは `compositeSubgraph` を保存します。複合ノードは評価エンジンがサブグラフを直接扱えますが、現行の読み込み処理は自作ノードの `customCode` から `evaluate` 関数を再構成しません。
+永続化はダウンロードする JSON のみです。関数はJSON化できないため、自作ノードは `customCode`、複合ノードは `compositeSubgraph` を保存します。読み込み時は `projectFormat.ts` が形式とグラフ整合性を検証し、自作ノードの `customCode` から `evaluate` 関数を再構成します。複合ノードは評価エンジンがサブグラフを直接扱います。
 
 ## 主要ファイル
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { FlowProjectExport } from '../types';
 import { Upload, AlertCircle, CheckCircle2, X, AlertTriangle } from 'lucide-react';
+import { parseFlowProjectJson } from '../engine/projectFormat';
 
 interface LoadGraphModalProps {
   isOpen: boolean;
@@ -37,32 +38,11 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const parsed = JSON.parse(text);
-
-        if (!parsed || typeof parsed !== 'object') {
-          throw new Error('無効なJSONオブジェクトです。');
-        }
-
-        if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.connections)) {
-          throw new Error(
-            'ModuLoomのプロジェクト形式ではありません（nodes または connections 配列が見つかりません）。',
-          );
-        }
-
-        const project: FlowProjectExport = {
-          version: parsed.version || '1.0.0',
-          appName: parsed.appName || 'ModuLoom Project',
-          exportedAt: parsed.exportedAt || new Date().toISOString(),
-          nodes: parsed.nodes,
-          connections: parsed.connections,
-          customTypes: parsed.customTypes || [],
-          customDefinitions: parsed.customDefinitions || [],
-          viewport: parsed.viewport || { zoom: 1.0, pan: { x: 60, y: 80 } },
-        };
+        const project = parseFlowProjectJson(text);
 
         setPreviewProject(project);
-      } catch (err: any) {
-        setError(err.message || 'ファイルの解析に失敗しました。');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'ファイルの解析に失敗しました。');
       }
     };
     reader.onerror = () => {
@@ -208,6 +188,15 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>
                     ※ 現在のキャンバス上のノード（{currentNodeCount}個）は置き換えられます
+                  </span>
+                </div>
+              )}
+
+              {previewProject.customDefinitions?.some((definition) => definition.customCode) && (
+                <div className="flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    自作ノードには実行可能なJavaScript式が含まれます。信頼できるファイルだけを復元してください。
                   </span>
                 </div>
               )}

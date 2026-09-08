@@ -26,6 +26,7 @@ import { CustomTypeModal } from './components/CustomTypeModal';
 import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
+import { CURRENT_PROJECT_VERSION } from './engine/projectFormat';
 
 export default function App() {
   // Empty graph as initial state (no sample nodes by default)
@@ -740,7 +741,7 @@ export default function App() {
   // Export JSON project file (Local Download)
   const handleExportJson = useCallback(() => {
     const projectData: FlowProjectExport = {
-      version: '1.0.0',
+      version: CURRENT_PROJECT_VERSION,
       appName: 'ModuLoom Project',
       exportedAt: new Date().toISOString(),
       nodes,
