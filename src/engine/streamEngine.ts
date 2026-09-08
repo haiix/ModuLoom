@@ -23,7 +23,7 @@ export interface StreamInstance<T = any> extends AsyncIterable<T> {
  */
 export function createIntervalStream(
   intervalMs: number = 500,
-  maxLimit: number = 20
+  maxLimit: number = 20,
 ): StreamInstance<number> {
   let count = 0;
   let cancelled = false;
@@ -55,10 +55,7 @@ export function createIntervalStream(
 /**
  * Creates an AsyncIterator from an array, emitting each item with delayMs between items.
  */
-export function createArrayStream<T>(
-  items: T[],
-  delayMs: number = 300
-): StreamInstance<T> {
+export function createArrayStream<T>(items: T[], delayMs: number = 300): StreamInstance<T> {
   let index = 0;
   let cancelled = false;
 
@@ -93,7 +90,7 @@ export function createArrayStream<T>(
  */
 export function mapStream<T, R>(
   source: AsyncIterable<T>,
-  transform: (item: T) => R | Promise<R>
+  transform: (item: T) => R | Promise<R>,
 ): StreamInstance<R> {
   return {
     isStream: true,
@@ -117,7 +114,7 @@ export function mapStream<T, R>(
  */
 export function filterStream<T>(
   source: AsyncIterable<T>,
-  predicate: (item: T) => boolean | Promise<boolean>
+  predicate: (item: T) => boolean | Promise<boolean>,
 ): StreamInstance<T> {
   return {
     isStream: true,
@@ -143,10 +140,7 @@ export function filterStream<T>(
 /**
  * Limits an async iterable to the first count items.
  */
-export function takeStream<T>(
-  source: AsyncIterable<T>,
-  count: number
-): StreamInstance<T> {
+export function takeStream<T>(source: AsyncIterable<T>, count: number): StreamInstance<T> {
   let taken = 0;
   return {
     isStream: true,
@@ -174,7 +168,7 @@ export function takeStream<T>(
 export async function collectStream<T>(
   source: AsyncIterable<T>,
   onChunk?: (item: T, currentArray: T[]) => void,
-  maxItems: number = 100
+  maxItems: number = 100,
 ): Promise<T[]> {
   const results: T[] = [];
   try {

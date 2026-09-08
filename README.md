@@ -19,11 +19,11 @@ ModuLoom は、純粋関数をノードとして組み合わせ、型付きの�
 
 ## 必要環境
 
-- Node.js 20 または 22 を推奨
+- Node.js 24 を推奨
 - npm
 - モダンブラウザ（Chrome、Edge、Firefox、Safari の現行版を想定）
 
-`package.json` に Node.js の `engines` 指定はありません。Vite 6 と TypeScript 5.8 を利用するため、古い Node.js は避けてください。
+`package.json` では Node.js 24以上、npm 11以上を指定し、CI も Node.js 24を使用します。
 
 ## セットアップ
 
@@ -48,13 +48,19 @@ npm run dev
 
 ## npm スクリプト
 
-| コマンド | 内容 |
-| --- | --- |
-| `npm run dev` | Vite 開発サーバーをポート 3000 で起動 |
-| `npm run build` | 本番用ファイルを `dist/` に生成 |
-| `npm run preview` | ビルド済みファイルをローカルで確認 |
-| `npm run lint` | `tsc --noEmit` で型チェック |
-| `npm run clean` | `dist` と `server.js` を削除 |
+| コマンド               | 内容                                  |
+| ---------------------- | ------------------------------------- |
+| `npm run dev`          | Vite 開発サーバーをポート 3000 で起動 |
+| `npm run build`        | 本番用ファイルを `dist/` に生成       |
+| `npm run preview`      | ビルド済みファイルをローカルで確認    |
+| `npm run typecheck`    | `tsc --noEmit` で型チェック           |
+| `npm run lint`         | ESLint でコードを検査                 |
+| `npm run lint:fix`     | ESLint で自動修正可能な問題を修正     |
+| `npm run format`       | Prettier でリポジトリを整形           |
+| `npm run format:check` | Prettier の整形差分を検査             |
+| `npm test`             | Vitest のテストを1回実行              |
+| `npm run test:watch`   | Vitest を監視モードで起動             |
+| `npm run clean`        | `dist` と `server.js` を削除          |
 
 `clean` は Unix 系の `rm` を使用しているため、標準の Windows PowerShell ではそのまま動作しない場合があります。
 
@@ -70,10 +76,13 @@ npm run dev
 ## 技術スタック
 
 - React 19
-- TypeScript 5.8
-- Vite 6
+- TypeScript 6
+- Vite 8
 - Tailwind CSS 4
 - Lucide React
+- ESLint 10
+- Prettier 3
+- Vitest 5
 
 評価処理、保存、コード生成はブラウザ内で行われます。現時点でバックエンドやデータベースはありません。
 

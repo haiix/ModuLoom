@@ -3,8 +3,6 @@ import {
   NodeDefinition,
   NodeInstance,
   NodeEvaluationResult,
-  Port,
-  TYPE_CONFIG,
   CustomTypeDefinition,
   getTypeStyle,
 } from '../types';
@@ -130,22 +128,22 @@ export const NodeView: React.FC<NodeViewProps> = ({
         isSelected
           ? 'ring-2 ring-indigo-500 shadow-xl border-indigo-400 dark:border-indigo-600'
           : isSteppingActive
-          ? 'ring-2 ring-emerald-500 shadow-xl border-emerald-400 dark:border-emerald-600'
-          : evaluation?.isPending
-          ? 'ring-2 ring-orange-500 shadow-xl border-orange-400 dark:border-orange-600'
-          : evaluation?.isStreaming
-          ? 'ring-2 ring-sky-500 shadow-xl border-sky-400 dark:border-sky-600'
-          : evaluation?.error
-          ? 'border-red-400 dark:border-red-600 ring-1 ring-red-400'
-          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+            ? 'ring-2 ring-emerald-500 shadow-xl border-emerald-400 dark:border-emerald-600'
+            : evaluation?.isPending
+              ? 'ring-2 ring-orange-500 shadow-xl border-orange-400 dark:border-orange-600'
+              : evaluation?.isStreaming
+                ? 'ring-2 ring-sky-500 shadow-xl border-sky-400 dark:border-sky-600'
+                : evaluation?.error
+                  ? 'border-red-400 dark:border-red-600 ring-1 ring-red-400'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
       }`}
     >
       {/* Node Header */}
-      <div
-        className="node-drag-handle flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-850/80 rounded-t-xl cursor-grab active:cursor-grabbing"
-      >
+      <div className="node-drag-handle flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-850/80 rounded-t-xl cursor-grab active:cursor-grabbing">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="shrink-0">{CATEGORY_ICONS[definition.category] || <Box className="w-3.5 h-3.5" />}</span>
+          <span className="shrink-0">
+            {CATEGORY_ICONS[definition.category] || <Box className="w-3.5 h-3.5" />}
+          </span>
           {isEditingLabel ? (
             <input
               type="text"
@@ -203,7 +201,8 @@ export const NodeView: React.FC<NodeViewProps> = ({
               cache
             </span>
           ) : (
-            evaluation?.durationMs !== undefined && !evaluation.isPending && (
+            evaluation?.durationMs !== undefined &&
+            !evaluation.isPending && (
               <span
                 className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60"
                 title="差分再計算で実行"
@@ -402,7 +401,9 @@ export const NodeView: React.FC<NodeViewProps> = ({
                   <input
                     type="text"
                     value={node.state?.portName ?? 'x'}
-                    onChange={(e) => onUpdateState({ ...node.state, portName: e.target.value.replace(/\s+/g, '') })}
+                    onChange={(e) =>
+                      onUpdateState({ ...node.state, portName: e.target.value.replace(/\s+/g, '') })
+                    }
                     onMouseDown={stopInputPropagation}
                     onMouseUp={stopInputPropagation}
                     onClick={stopInputPropagation}
@@ -456,7 +457,10 @@ export const NodeView: React.FC<NodeViewProps> = ({
                       type={node.state?.portType === 'number' ? 'number' : 'text'}
                       value={node.state?.testValue ?? ''}
                       onChange={(e) => {
-                        const val = node.state?.portType === 'number' ? Number(e.target.value) : e.target.value;
+                        const val =
+                          node.state?.portType === 'number'
+                            ? Number(e.target.value)
+                            : e.target.value;
                         onUpdateState({ ...node.state, testValue: val });
                       }}
                       onMouseDown={stopInputPropagation}
@@ -484,7 +488,9 @@ export const NodeView: React.FC<NodeViewProps> = ({
                   <input
                     type="text"
                     value={node.state?.portName ?? 'result'}
-                    onChange={(e) => onUpdateState({ ...node.state, portName: e.target.value.replace(/\s+/g, '') })}
+                    onChange={(e) =>
+                      onUpdateState({ ...node.state, portName: e.target.value.replace(/\s+/g, '') })
+                    }
                     onMouseDown={stopInputPropagation}
                     onMouseUp={stopInputPropagation}
                     onClick={stopInputPropagation}
@@ -684,7 +690,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
                   n.typeId !== 'composite/output-port' &&
                   (n.typeId.startsWith('input/') ||
                     n.state?.value !== undefined ||
-                    n.state?.text !== undefined)
+                    n.state?.text !== undefined),
               );
 
               if (fixedNodes.length === 0) return null;
@@ -797,8 +803,8 @@ export const NodeView: React.FC<NodeViewProps> = ({
                           isHoveredCompatible
                             ? 'ring-4 ring-emerald-400 scale-125'
                             : isHoveredIncompatible
-                            ? 'ring-4 ring-red-400 scale-125'
-                            : ''
+                              ? 'ring-4 ring-red-400 scale-125'
+                              : ''
                         }`}
                         style={{
                           borderColor: portColor,

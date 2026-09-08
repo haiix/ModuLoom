@@ -16,9 +16,7 @@ const DEFAULT_NEW_INPUTS: Port[] = [
   { id: 'b', name: 'b', type: 'number', defaultValue: 20 },
 ];
 
-const DEFAULT_NEW_OUTPUTS: Port[] = [
-  { id: 'result', name: 'result', type: 'number' },
-];
+const DEFAULT_NEW_OUTPUTS: Port[] = [{ id: 'result', name: 'result', type: 'number' }];
 
 export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
   isOpen,
@@ -51,7 +49,7 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
       setTestResult(null);
       setTestError(null);
     }
-  }, [isOpen]);
+  }, [editingTypeId, isOpen]);
 
   const resetFormToNew = () => {
     setEditingTypeId(null);
@@ -62,9 +60,7 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
       { id: 'a', name: 'a', type: 'number', defaultValue: 10 },
       { id: 'b', name: 'b', type: 'number', defaultValue: 20 },
     ]);
-    setOutputs([
-      { id: 'result', name: 'result', type: 'number' },
-    ]);
+    setOutputs([{ id: 'result', name: 'result', type: 'number' }]);
     setExpression('inputs.a + inputs.b');
     setTestResult(null);
     setTestError(null);
@@ -132,7 +128,7 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
   const handleInputNameChange = (index: number, name: string) => {
     const clean = name.replace(/[^a-zA-Z0-9_]/g, '');
     setInputs((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, name: clean, id: clean } : item))
+      prev.map((item, i) => (i === index ? { ...item, name: clean, id: clean } : item)),
     );
   };
 
@@ -147,12 +143,12 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
           (p.type === 'number'
             ? 10
             : p.type === 'string'
-            ? 'test'
-            : p.type === 'boolean'
-            ? true
-            : p.type === 'array'
-            ? [1, 2]
-            : {});
+              ? 'test'
+              : p.type === 'boolean'
+                ? true
+                : p.type === 'array'
+                  ? [1, 2]
+                  : {});
       }
       const fn = new Function('inputs', `return (${expression});`);
       const res = fn(testInputs);
@@ -248,7 +244,7 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
           const res = fn(inputsRecord);
           return { [primaryOutputId]: res };
         } catch (err: any) {
-          throw new Error(`カスタム関数エラー: ${err?.message}`);
+          throw new Error(`カスタム関数エラー: ${err?.message}`, { cause: err });
         }
       },
     };
@@ -268,9 +264,7 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
               <Code2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-base">
-                自作ノードマネージャー (Custom Nodes)
-              </h3>
+              <h3 className="font-semibold text-base">自作ノードマネージャー (Custom Nodes)</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 独自のJavaScript純粋関数式と入出力ポートを定義し、ノードとして登録します
               </p>
@@ -322,7 +316,9 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
                   <div className="flex items-center gap-2">
                     <Edit3 className="w-4 h-4 text-indigo-500" />
-                    <span>既存のノード <strong>{label}</strong> を編集中です。保存すると更新されます。</span>
+                    <span>
+                      既存のノード <strong>{label}</strong> を編集中です。保存すると更新されます。
+                    </span>
                   </div>
                   <button
                     onClick={resetFormToNew}
@@ -433,7 +429,10 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                         style={{ backgroundColor: getTypeStyle(inp.type, customTypes).color }}
                       />
                       <div className="flex-1 text-xs text-slate-500 dark:text-slate-400">
-                        参照: <code className="text-indigo-600 dark:text-indigo-400 font-mono font-semibold">inputs.{inp.id}</code>
+                        参照:{' '}
+                        <code className="text-indigo-600 dark:text-indigo-400 font-mono font-semibold">
+                          inputs.{inp.id}
+                        </code>
                       </div>
                       {inputs.length > 1 && (
                         <button
@@ -461,7 +460,13 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                     value={outputs[0]?.name || 'result'}
                     onChange={(e) => {
                       const clean = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
-                      setOutputs([{ id: clean || 'result', name: clean || 'result', type: outputs[0]?.type || 'number' }]);
+                      setOutputs([
+                        {
+                          id: clean || 'result',
+                          name: clean || 'result',
+                          type: outputs[0]?.type || 'number',
+                        },
+                      ]);
                     }}
                     className="w-28 px-2 py-1 text-xs rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-mono"
                     placeholder="出力名"
@@ -493,10 +498,16 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                   </select>
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: getTypeStyle(outputs[0]?.type || 'number', customTypes).color }}
+                    style={{
+                      backgroundColor: getTypeStyle(outputs[0]?.type || 'number', customTypes)
+                        .color,
+                    }}
                   />
                   <div className="flex-1 text-xs text-slate-500 dark:text-slate-400">
-                    出力キー: <code className="text-emerald-600 dark:text-emerald-400 font-mono font-semibold">{outputs[0]?.id}</code>
+                    出力キー:{' '}
+                    <code className="text-emerald-600 dark:text-emerald-400 font-mono font-semibold">
+                      {outputs[0]?.id}
+                    </code>
                   </div>
                 </div>
               </div>
@@ -523,14 +534,17 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                   className="w-full font-mono text-xs p-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-950 text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  副作用のない純粋な式を入力してください。例: <code>inputs.a * 1.1</code> や <code>inputs.a &gt; 0 ? inputs.a : 0</code>
+                  副作用のない純粋な式を入力してください。例: <code>inputs.a * 1.1</code> や{' '}
+                  <code>inputs.a &gt; 0 ? inputs.a : 0</code>
                 </p>
 
                 {/* Test result status */}
                 {testResult !== null && (
                   <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>テスト実行成功: <code className="font-mono font-semibold">{testResult}</code></span>
+                    <span>
+                      テスト実行成功: <code className="font-mono font-semibold">{testResult}</code>
+                    </span>
                   </div>
                 )}
                 {testError && (
@@ -634,7 +648,8 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                           出力ポート
                         </span>
                         <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                          {def.outputs[0]?.name}: <span className="text-emerald-500">{def.outputs[0]?.type}</span>
+                          {def.outputs[0]?.name}:{' '}
+                          <span className="text-emerald-500">{def.outputs[0]?.type}</span>
                         </span>
                       </div>
                     </div>

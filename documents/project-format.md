@@ -125,14 +125,14 @@ interface CustomTypeDefinition {
 
 省略された項目には次の値が補われます。
 
-| 項目 | 既定値 |
-| --- | --- |
-| `version` | `1.0.0` |
-| `appName` | `ModuLoom Project` |
-| `exportedAt` | 読み込み時刻 |
-| `customTypes` | `[]` |
-| `customDefinitions` | `[]` |
-| `viewport` | `{ "zoom": 1, "pan": { "x": 60, "y": 80 } }` |
+| 項目                | 既定値                                       |
+| ------------------- | -------------------------------------------- |
+| `version`           | `1.0.0`                                      |
+| `appName`           | `ModuLoom Project`                           |
+| `exportedAt`        | 読み込み時刻                                 |
+| `customTypes`       | `[]`                                         |
+| `customDefinitions` | `[]`                                         |
+| `viewport`          | `{ "zoom": 1, "pan": { "x": 60, "y": 80 } }` |
 
 `nodes` または `connections` が配列でない場合は読み込みを拒否します。
 

@@ -11,14 +11,18 @@ npm run dev
 
 現行コードは `.env.example` の `GEMINI_API_KEY`、`APP_URL` を参照しません。環境変数ファイルを作らなくてもフロントエンドを起動できます。
 
+TypeScript は `typescript-eslint` の対応範囲に合わせ、6系の最新互換版を使用します。TypeScript 7へ更新する際は、`typescript-eslint` が7系を正式対応してから両方を同時に更新してください。
+
 ## 検証コマンド
 
 ```bash
 npm run lint
+npm run typecheck
+npm test
 npm run build
 ```
 
-`lint` という名前ですが、実体は ESLint ではなく `tsc --noEmit` による型チェックです。自動テスト用スクリプトとテストファイルは現時点でありません。
+`lint` は ESLint、`typecheck` は `tsc --noEmit`、`test` は Vitest を実行します。コミット前には `npm run format:check` も実行してください。
 
 本番ビルドを確認する場合:
 
@@ -31,6 +35,8 @@ npm run preview
 ```text
 .
 ├─ public/                  静的公開ファイル
+├─ tests/                   Vitest 単体テスト
+├─ .github/workflows/       GitHub Actions CI
 ├─ src/
 │  ├─ components/          React UI コンポーネント
 │  ├─ engine/              型、DAG、非同期・ストリーム評価
@@ -120,7 +126,16 @@ UIだけでなく、外部JSONを読み込む経路も考慮してください�
 
 `version` を上げる場合は、旧形式の読み込み方針とマイグレーションを同時に実装してください。現状はバージョン文字列を保存するだけで、分岐には利用していません。
 
-## 推奨テスト範囲
+## テスト
+
+`tests/` には型システム、DAG操作・同期評価、AsyncIteratorユーティリティの単体テストがあります。
+
+```bash
+npm test
+npm run test:watch
+```
+
+今後の推奨テスト範囲:
 
 - `wouldCreateCycle`: 自己辺、直列、分岐、閉路
 - `getTopologicalOrder`: 独立ノード、複数の依存、閉路

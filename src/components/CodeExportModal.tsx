@@ -7,11 +7,7 @@ interface CodeExportModalProps {
   code: string;
 }
 
-export const CodeExportModal: React.FC<CodeExportModalProps> = ({
-  isOpen,
-  onClose,
-  code,
-}) => {
+export const CodeExportModal: React.FC<CodeExportModalProps> = ({ isOpen, onClose, code }) => {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;

@@ -58,7 +58,19 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
   const [search, setSearch] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
-  const categories = ['Composite', 'Input', 'Math', 'String', 'Logic', 'Array', 'Object', 'Async', 'Stream', 'Output', 'Custom'];
+  const categories = [
+    'Composite',
+    'Input',
+    'Math',
+    'String',
+    'Logic',
+    'Array',
+    'Object',
+    'Async',
+    'Stream',
+    'Output',
+    'Custom',
+  ];
 
   const filteredDefs = definitions.filter((def) => {
     if (!search.trim()) return true;
@@ -183,7 +195,9 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
                             <div className="flex items-start gap-2 min-w-0">
                               <span
                                 className="w-2.5 h-2.5 rounded-full mt-1 shrink-0"
-                                style={{ backgroundColor: getTypeStyle(outType, customTypes).color }}
+                                style={{
+                                  backgroundColor: getTypeStyle(outType, customTypes).color,
+                                }}
                               />
                               <div className="min-w-0">
                                 <div className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">

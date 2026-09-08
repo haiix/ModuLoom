@@ -8,18 +8,7 @@ import {
   CustomTypeDefinition,
   getTypeStyle,
 } from '../types';
-import {
-  Layers,
-  X,
-  AlertCircle,
-  Sparkles,
-  Box,
-  Info,
-  Lock,
-  ArrowDownRight,
-  ArrowRight,
-  CheckCircle2,
-} from 'lucide-react';
+import { Layers, X, AlertCircle, Sparkles, Box, Info, Lock, CheckCircle2 } from 'lucide-react';
 import { evaluateCompositeNode } from '../engine/dagEngine';
 
 interface CreateCompositeModalProps {
@@ -32,7 +21,7 @@ interface CreateCompositeModalProps {
   onSaveComposite: (
     compositeDef: NodeDefinition,
     replaceCanvas: boolean,
-    targetNodeIds: string[]
+    targetNodeIds: string[],
   ) => void;
   onInsertSampleTerminalNodes?: (sampleType?: 'multiply-partial' | 'vector-hypot') => void;
 }
@@ -57,18 +46,12 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
     return nodes.filter((n) => n.typeId === 'composite/output-port');
   }, [nodes]);
 
-  // All Input Terminal Nodes on canvas
-  const allInputTerminalNodes = useMemo(() => {
-    return nodes.filter((n) => n.typeId === 'composite/input-port');
-  }, [nodes]);
-
   // Trace back upstream from Group Output Terminals (Reverse BFS)
   const {
     subgraphNodes,
     subgraphConnections,
     connectedInputTerminals,
     partiallyAppliedNodes,
-    intermediateNodes,
     inputPorts,
     outputPorts,
   } = useMemo(() => {
@@ -114,7 +97,7 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
     // Nodes included in the composite subgraph
     const subNodes = nodes.filter((n) => canReachOutputs.has(n.id));
     const subConnections = connections.filter(
-      (c) => canReachOutputs.has(c.fromNodeId) && canReachOutputs.has(c.toNodeId)
+      (c) => canReachOutputs.has(c.fromNodeId) && canReachOutputs.has(c.toNodeId),
     );
 
     // Group input terminals connected to the output path
@@ -142,7 +125,7 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
       (n) =>
         n.typeId !== 'composite/input-port' &&
         n.typeId !== 'composite/output-port' &&
-        !fixedInputs.some((f) => f.id === n.id)
+        !fixedInputs.some((f) => f.id === n.id),
     );
 
     // Input ports generated from connected terminal inputs (with duplicate-name deduplication)
@@ -310,7 +293,8 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                   グループ出力端子ノードがありません
                 </h3>
                 <p className="text-xs text-amber-700 dark:text-amber-400 max-w-md mx-auto">
-                  複合ノード化を行うには、計算の終点となる<strong>「グループ出力端子」ノード</strong>がキャンバス上に必要です。
+                  複合ノード化を行うには、計算の終点となる
+                  <strong>「グループ出力端子」ノード</strong>がキャンバス上に必要です。
                 </p>
               </div>
 
@@ -345,7 +329,8 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
                   <span className="flex items-center gap-1.5">
                     <Box className="w-4 h-4 text-purple-500" />
-                    出力端子から遡って検出 ({subgraphNodes.length} ノード / {subgraphConnections.length} 接続)
+                    出力端子から遡って検出 ({subgraphNodes.length} ノード /{' '}
+                    {subgraphConnections.length} 接続)
                   </span>
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
@@ -359,7 +344,9 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                   <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
                     <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
                       <span>公開引数 ({inputPorts.length})</span>
-                      <span className="text-[10px] text-purple-600 dark:text-purple-400 font-normal">引数ポート</span>
+                      <span className="text-[10px] text-purple-600 dark:text-purple-400 font-normal">
+                        引数ポート
+                      </span>
                     </div>
                     {inputPorts.length === 0 ? (
                       <div className="text-[11px] text-slate-400 italic py-1">
@@ -413,7 +400,10 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                               key={n.id}
                               className="px-2 py-1 rounded bg-white dark:bg-slate-900 border border-purple-100 dark:border-purple-900/40 text-xs flex items-center justify-between"
                             >
-                              <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[90px]" title={n.customLabel || def?.label}>
+                              <span
+                                className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[90px]"
+                                title={n.customLabel || def?.label}
+                              >
                                 {n.customLabel || def?.label || n.typeId}
                               </span>
                               <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200 font-bold">
@@ -430,7 +420,9 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                   <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
                     <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
                       <span>戻り値 ({outputPorts.length})</span>
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">出力ポート</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">
+                        出力ポート
+                      </span>
                     </div>
                     <div className="space-y-1.5">
                       {outputPorts.map((port, idx) => {
@@ -463,7 +455,10 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                     <span>
                       検出された入力フォームの値（
                       {partiallyAppliedNodes
-                        .map((n) => `${n.customLabel || definitions.get(n.typeId)?.label || n.typeId}: ${n.state?.value ?? ''}`)
+                        .map(
+                          (n) =>
+                            `${n.customLabel || definitions.get(n.typeId)?.label || n.typeId}: ${n.state?.value ?? ''}`,
+                        )
                         .join(', ')}
                       ）は、複合ノード内部の定数値として固定（部分適用）されます。
                     </span>
@@ -508,7 +503,10 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                     onChange={(e) => setReplaceCanvas(e.target.checked)}
                     className="mt-0.5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
                   />
-                  <label htmlFor="replaceCanvas" className="text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <label
+                    htmlFor="replaceCanvas"
+                    className="text-xs text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
                     <span className="font-semibold block text-slate-900 dark:text-slate-100">
                       キャンバス上の対象ノード群をこの複合ノード1つに置き換える
                     </span>

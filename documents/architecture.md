@@ -63,14 +63,7 @@ Graph model (NodeInstance + Connection + NodeDefinition)
 
 ```ts
 type BuiltinDataType =
-  | 'number'
-  | 'string'
-  | 'boolean'
-  | 'array'
-  | 'object'
-  | 'promise'
-  | 'stream'
-  | 'any';
+  'number' | 'string' | 'boolean' | 'array' | 'object' | 'promise' | 'stream' | 'any';
 ```
 
 接続互換性は宣言型だけで判定し、実行値の変換は行いません。同型、片側が `any`、またはカスタム型から `object` への接続を許可します。`any` は双方向に互換なので、型安全性を弱めることに注意してください。
@@ -148,15 +141,15 @@ type BuiltinDataType =
 
 ## 主要ファイル
 
-| ファイル | 責務 |
-| --- | --- |
-| `src/App.tsx` | 状態統合、差分評価、操作ハンドラー、画面構成 |
-| `src/types.ts` | グラフ、型、評価結果、保存形式の型定義 |
-| `src/engine/dagEngine.ts` | DAG 操作、同期・非同期評価、複合評価、TS生成 |
-| `src/engine/typeSystem.ts` | 型互換性、値型判定、表示整形 |
-| `src/engine/streamEngine.ts` | Promise／AsyncIterator ヘルパー |
-| `src/nodes/definitions.ts` | 同期組み込みノードとプリセット |
-| `src/nodes/asyncStreamNodes.ts` | 非同期・ストリームノード |
-| `src/nodes/customTypeNodes.ts` | カスタム型由来ノードの生成 |
-| `src/components/Canvas.tsx` | キャンバス操作、接続検証、ワイヤー描画 |
-| `src/components/NodeView.tsx` | ノードフォーム、ポート、状態・結果表示 |
+| ファイル                        | 責務                                         |
+| ------------------------------- | -------------------------------------------- |
+| `src/App.tsx`                   | 状態統合、差分評価、操作ハンドラー、画面構成 |
+| `src/types.ts`                  | グラフ、型、評価結果、保存形式の型定義       |
+| `src/engine/dagEngine.ts`       | DAG 操作、同期・非同期評価、複合評価、TS生成 |
+| `src/engine/typeSystem.ts`      | 型互換性、値型判定、表示整形                 |
+| `src/engine/streamEngine.ts`    | Promise／AsyncIterator ヘルパー              |
+| `src/nodes/definitions.ts`      | 同期組み込みノードとプリセット               |
+| `src/nodes/asyncStreamNodes.ts` | 非同期・ストリームノード                     |
+| `src/nodes/customTypeNodes.ts`  | カスタム型由来ノードの生成                   |
+| `src/components/Canvas.tsx`     | キャンバス操作、接続検証、ワイヤー描画       |
+| `src/components/NodeView.tsx`   | ノードフォーム、ポート、状態・結果表示       |

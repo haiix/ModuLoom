@@ -44,12 +44,8 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     category: 'Async',
     kind: 'pure',
     description: '値を即座に解決されるPromiseオブジェクトにラップ',
-    inputs: [
-      { id: 'value', name: 'value', type: 'any', defaultValue: 100 },
-    ],
-    outputs: [
-      { id: 'promise', name: 'promise', type: 'promise' },
-    ],
+    inputs: [{ id: 'value', name: 'value', type: 'any', defaultValue: 100 }],
+    outputs: [{ id: 'promise', name: 'promise', type: 'promise' }],
     evaluate: (inputs) => {
       return {
         promise: Promise.resolve(inputs.value),
@@ -63,12 +59,8 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'pure',
     isAsync: true,
     description: 'Promiseを受け取り、解決されるまで待機して値を取り出し',
-    inputs: [
-      { id: 'promise', name: 'promise', type: 'promise' },
-    ],
-    outputs: [
-      { id: 'result', name: 'result', type: 'any' },
-    ],
+    inputs: [{ id: 'promise', name: 'promise', type: 'promise' }],
+    outputs: [{ id: 'result', name: 'result', type: 'any' }],
     evaluate: async (inputs) => {
       if (inputs.promise && typeof inputs.promise.then === 'function') {
         const resolved = await inputs.promise;
@@ -88,9 +80,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'p1', name: 'p1', type: 'promise' },
       { id: 'p2', name: 'p2', type: 'promise' },
     ],
-    outputs: [
-      { id: 'results', name: 'results', type: 'array' },
-    ],
+    outputs: [{ id: 'results', name: 'results', type: 'array' }],
     evaluate: async (inputs) => {
       const p1 = isPromise(inputs.p1) ? inputs.p1 : Promise.resolve(inputs.p1);
       const p2 = isPromise(inputs.p2) ? inputs.p2 : Promise.resolve(inputs.p2);
@@ -147,9 +137,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'intervalMs', name: 'intervalMs', type: 'number', defaultValue: 400 },
       { id: 'limit', name: 'limit', type: 'number', defaultValue: 8 },
     ],
-    outputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
-    ],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     evaluate: (inputs) => {
       const ms = Math.max(20, Number(inputs.intervalMs ?? 400));
       const limit = Math.max(1, Number(inputs.limit ?? 8));
@@ -168,9 +156,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'items', name: 'items', type: 'array', defaultValue: [10, 20, 30, 40, 50] },
       { id: 'delayMs', name: 'delayMs', type: 'number', defaultValue: 300 },
     ],
-    outputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
-    ],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     evaluate: (inputs) => {
       const arr = Array.isArray(inputs.items) ? inputs.items : [1, 2, 3, 4, 5];
       const delay = Math.max(0, Number(inputs.delayMs ?? 300));
@@ -189,9 +175,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'stream', name: 'stream', type: 'stream' },
       { id: 'multiplier', name: 'multiplier', type: 'number', defaultValue: 2 },
     ],
-    outputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
-    ],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     evaluate: (inputs) => {
       if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
         return { stream: createIntervalStream(400, 5) };
@@ -207,14 +191,13 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     label: 'Stream Filter (条件抽出)',
     category: 'Stream',
     kind: 'pure',
-    description: '条件（偶数、奇数、正数、または閾値判定）に基づいてストリーム要素をフィルタリング送出',
+    description:
+      '条件（偶数、奇数、正数、または閾値判定）に基づいてストリーム要素をフィルタリング送出',
     inputs: [
       { id: 'stream', name: 'stream', type: 'stream' },
       { id: 'threshold', name: 'threshold (閾値)', type: 'number', defaultValue: 0 },
     ],
-    outputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
-    ],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     defaultState: { mode: 'even' },
     evaluate: (inputs, state) => {
       if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
@@ -226,11 +209,15 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
         stream: filterStream(inputs.stream, (val) => {
           if (typeof val !== 'number') return false;
           switch (mode) {
-            case 'odd': return Math.abs(val % 2) === 1;
-            case 'positive': return val > 0;
-            case 'greater': return val > thresh;
+            case 'odd':
+              return Math.abs(val % 2) === 1;
+            case 'positive':
+              return val > 0;
+            case 'greater':
+              return val > thresh;
             case 'even':
-            default: return val % 2 === 0;
+            default:
+              return val % 2 === 0;
           }
         }),
       };
@@ -246,9 +233,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'stream', name: 'stream', type: 'stream' },
       { id: 'count', name: 'count', type: 'number', defaultValue: 4 },
     ],
-    outputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
-    ],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     evaluate: (inputs) => {
       if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
         return { stream: createIntervalStream(400, 5) };
@@ -266,9 +251,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'output',
     isAsync: true,
     description: 'AsyncIteratorを最後まで非同期消費し、配列として集約',
-    inputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
-    ],
+    inputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     outputs: [
       { id: 'array', name: 'array', type: 'array' },
       { id: 'count', name: 'count', type: 'number' },

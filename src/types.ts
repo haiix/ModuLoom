@@ -1,4 +1,5 @@
-export type BuiltinDataType = 'number' | 'string' | 'boolean' | 'array' | 'object' | 'promise' | 'stream' | 'any';
+export type BuiltinDataType =
+  'number' | 'string' | 'boolean' | 'array' | 'object' | 'promise' | 'stream' | 'any';
 export type DataType = BuiltinDataType | string; // Built-in or custom type like 'User', 'Point2D'
 
 export interface CustomTypeField {
@@ -36,12 +37,27 @@ export interface CompositeSubgraph {
 export interface NodeDefinition {
   typeId: string;
   label: string;
-  category: 'Math' | 'String' | 'Logic' | 'Array' | 'Object' | 'Async' | 'Stream' | 'Input' | 'Output' | 'Utility' | 'Custom' | 'Composite';
+  category:
+    | 'Math'
+    | 'String'
+    | 'Logic'
+    | 'Array'
+    | 'Object'
+    | 'Async'
+    | 'Stream'
+    | 'Input'
+    | 'Output'
+    | 'Utility'
+    | 'Custom'
+    | 'Composite';
   kind: NodeKind;
   description?: string;
   inputs: Port[];
   outputs: Port[];
-  evaluate: (inputs: Record<string, any>, state?: any) => Promise<Record<string, any>> | Record<string, any>;
+  evaluate: (
+    inputs: Record<string, any>,
+    state?: any,
+  ) => Promise<Record<string, any>> | Record<string, any>;
   defaultState?: any;
   customCode?: string; // For user-defined custom pure functions
   isAsync?: boolean;
@@ -193,7 +209,7 @@ export function getTypeStyle(type: DataType, customTypes?: CustomTypeDefinition[
     return BASE_TYPE_CONFIG[type as BuiltinDataType];
   }
 
-  const custom = customTypes?.find(ct => ct.id === type || ct.name === type);
+  const custom = customTypes?.find((ct) => ct.id === type || ct.name === type);
   if (custom) {
     return {
       label: custom.name,

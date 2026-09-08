@@ -1,4 +1,11 @@
-import { Connection, NodeDefinition, NodeInstance, GraphEvaluation, NodeEvaluationResult, CompositeSubgraph } from '../types';
+import {
+  Connection,
+  NodeDefinition,
+  NodeInstance,
+  GraphEvaluation,
+  NodeEvaluationResult,
+  CompositeSubgraph,
+} from '../types';
 import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
 
 /**
@@ -8,7 +15,7 @@ import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
 export function wouldCreateCycle(
   connections: Connection[],
   fromNodeId: string,
-  toNodeId: string
+  toNodeId: string,
 ): boolean {
   if (fromNodeId === toNodeId) return true;
 
@@ -49,7 +56,7 @@ export function wouldCreateCycle(
  */
 export function getTopologicalOrder(
   nodes: NodeInstance[],
-  connections: Connection[]
+  connections: Connection[],
 ): { order: string[]; hasCycle: boolean } {
   const inDegree = new Map<string, number>();
   const adj = new Map<string, string[]>();
@@ -60,7 +67,7 @@ export function getTopologicalOrder(
   }
 
   // Only consider connections between existing nodes
-  const nodeIds = new Set(nodes.map(n => n.id));
+  const nodeIds = new Set(nodes.map((n) => n.id));
   for (const conn of connections) {
     if (nodeIds.has(conn.fromNodeId) && nodeIds.has(conn.toNodeId)) {
       const neighbors = adj.get(conn.fromNodeId) || [];
@@ -105,7 +112,7 @@ export function getTopologicalOrder(
  */
 export function getDownstreamNodeIds(
   seedNodeIds: Iterable<string>,
-  connections: Connection[]
+  connections: Connection[],
 ): Set<string> {
   const adj = new Map<string, string[]>();
   for (const conn of connections) {
@@ -143,7 +150,7 @@ export function detectDirtySeedNodeIds(
   prevNodes: NodeInstance[],
   currNodes: NodeInstance[],
   prevConnections: Connection[],
-  currConnections: Connection[]
+  currConnections: Connection[],
 ): Set<string> | 'all' {
   // If previous graph was empty or completely replaced, evaluate all
   if (prevNodes.length === 0 && currNodes.length > 0) return 'all';
@@ -183,10 +190,10 @@ export function detectDirtySeedNodeIds(
 
   // 3. Check connection changes
   const prevConnKeys = new Set(
-    prevConnections.map((c) => `${c.fromNodeId}:${c.fromPortId}->${c.toNodeId}:${c.toPortId}`)
+    prevConnections.map((c) => `${c.fromNodeId}:${c.fromPortId}->${c.toNodeId}:${c.toPortId}`),
   );
   const currConnKeys = new Set(
-    currConnections.map((c) => `${c.fromNodeId}:${c.fromPortId}->${c.toNodeId}:${c.toPortId}`)
+    currConnections.map((c) => `${c.fromNodeId}:${c.fromPortId}->${c.toNodeId}:${c.toPortId}`),
   );
 
   // Added connections: target node input changed
@@ -214,7 +221,7 @@ export function detectDirtySeedNodeIds(
 export function evaluateCompositeNode(
   subgraph: CompositeSubgraph,
   externalInputs: Record<string, any>,
-  definitions: Map<string, NodeDefinition>
+  definitions: Map<string, NodeDefinition>,
 ): Record<string, any> {
   // Deep clone internal nodes and connections
   const internalNodes: NodeInstance[] = JSON.parse(JSON.stringify(subgraph.nodes));
@@ -256,7 +263,7 @@ export function evaluateCompositeNode(
 export async function evaluateCompositeNodeAsync(
   subgraph: CompositeSubgraph,
   externalInputs: Record<string, any>,
-  definitions: Map<string, NodeDefinition>
+  definitions: Map<string, NodeDefinition>,
 ): Promise<Record<string, any>> {
   const internalNodes: NodeInstance[] = JSON.parse(JSON.stringify(subgraph.nodes));
   const internalConnections: Connection[] = JSON.parse(JSON.stringify(subgraph.connections));
@@ -299,12 +306,12 @@ export function evaluateGraph(
   connections: Connection[],
   definitions: Map<string, NodeDefinition>,
   previousEvaluation?: GraphEvaluation,
-  dirtyNodeIds?: Set<string>
+  dirtyNodeIds?: Set<string>,
 ): GraphEvaluation {
   const result: GraphEvaluation = {};
   const { order, hasCycle } = getTopologicalOrder(nodes, connections);
 
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
   // Index connections by destination (toNodeId + toPortId)
   // Constraint: 1 connection per input port
@@ -331,7 +338,12 @@ export function evaluateGraph(
 
     // Incremental evaluation optimization:
     // If dirtyNodeIds is given, and this node is NOT dirty and was already computed, reuse previous output!
-    if (dirtyNodeIds && !dirtyNodeIds.has(nodeId) && previousEvaluation && previousEvaluation[nodeId]) {
+    if (
+      dirtyNodeIds &&
+      !dirtyNodeIds.has(nodeId) &&
+      previousEvaluation &&
+      previousEvaluation[nodeId]
+    ) {
       result[nodeId] = {
         ...previousEvaluation[nodeId],
         isCached: true,
@@ -441,7 +453,7 @@ export async function evaluateGraphAsync(
   previousEvaluation?: GraphEvaluation,
   dirtyNodeIds?: Set<string>,
   onNodeProgress?: (nodeId: string, partialEvaluation: NodeEvaluationResult) => void,
-  isCancelled?: () => boolean
+  isCancelled?: () => boolean,
 ): Promise<GraphEvaluation> {
   const result: GraphEvaluation = {};
   const { order, hasCycle } = getTopologicalOrder(nodes, connections);
@@ -471,7 +483,12 @@ export async function evaluateGraphAsync(
 
     // Incremental evaluation optimization:
     // If not dirty and previously evaluated, preserve cached outputs and do not re-run async operations!
-    if (dirtyNodeIds && !dirtyNodeIds.has(nodeId) && previousEvaluation && previousEvaluation[nodeId]) {
+    if (
+      dirtyNodeIds &&
+      !dirtyNodeIds.has(nodeId) &&
+      previousEvaluation &&
+      previousEvaluation[nodeId]
+    ) {
       result[nodeId] = {
         ...previousEvaluation[nodeId],
         isCached: true,
@@ -583,7 +600,7 @@ export async function evaluateGraphAsync(
                 isCached: false,
               });
             },
-            50
+            50,
           );
           outputs = { array: collected, count: collected.length };
         } else {
@@ -633,7 +650,7 @@ export function generateTypeScriptCode(
   nodes: NodeInstance[],
   connections: Connection[],
   definitions: Map<string, NodeDefinition>,
-  customTypes?: import('../types').CustomTypeDefinition[]
+  customTypes?: import('../types').CustomTypeDefinition[],
 ): string {
   const { order, hasCycle } = getTopologicalOrder(nodes, connections);
   if (hasCycle) {
@@ -645,22 +662,22 @@ export function generateTypeScriptCode(
     incoming.set(`${conn.toNodeId}:${conn.toPortId}`, conn);
   }
 
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
   // Check if any node is async or stream
-  const hasAsyncOrStream = nodes.some(n => {
+  const hasAsyncOrStream = nodes.some((n) => {
     const def = definitions.get(n.typeId);
     return (
       def?.isAsync ||
       def?.category === 'Async' ||
       def?.category === 'Stream' ||
-      def?.outputs.some(p => p.type === 'promise' || p.type === 'stream') ||
-      def?.inputs.some(p => p.type === 'promise' || p.type === 'stream')
+      def?.outputs.some((p) => p.type === 'promise' || p.type === 'stream') ||
+      def?.inputs.some((p) => p.type === 'promise' || p.type === 'stream')
     );
   });
 
-  const inputNodes = nodes.filter(n => definitions.get(n.typeId)?.kind === 'input');
-  const outputNodes = nodes.filter(n => definitions.get(n.typeId)?.kind === 'output');
+  const inputNodes = nodes.filter((n) => definitions.get(n.typeId)?.kind === 'input');
+  const outputNodes = nodes.filter((n) => definitions.get(n.typeId)?.kind === 'output');
 
   let ts = `/**\n * Auto-generated Pure Function Pipeline\n * Built with ModuLoom Type-Safe Node Editor\n */\n\n`;
 
@@ -754,7 +771,9 @@ export function generateTypeScriptCode(
       if (conn) {
         const sourceNode = nodeMap.get(conn.fromNodeId);
         const sourceDef = definitions.get(sourceNode?.typeId || '');
-        const sourceVar = sanitizeVarName(`node_${conn.fromNodeId.slice(0, 6)}_${sourceDef?.label}`);
+        const sourceVar = sanitizeVarName(
+          `node_${conn.fromNodeId.slice(0, 6)}_${sourceDef?.label}`,
+        );
         sourceExpr = `${sourceVar}.${conn.fromPortId}`;
       }
       ts += `  // Output: ${def.label}\n`;
@@ -768,7 +787,9 @@ export function generateTypeScriptCode(
         if (conn) {
           const sourceNode = nodeMap.get(conn.fromNodeId);
           const sourceDef = definitions.get(sourceNode?.typeId || '');
-          const sourceVar = sanitizeVarName(`node_${conn.fromNodeId.slice(0, 6)}_${sourceDef?.label}`);
+          const sourceVar = sanitizeVarName(
+            `node_${conn.fromNodeId.slice(0, 6)}_${sourceDef?.label}`,
+          );
           ts += `    ${p.id}: ${sourceVar}.${conn.fromPortId},\n`;
         } else {
           ts += `    ${p.id}: ${JSON.stringify(p.defaultValue)},\n`;
@@ -820,57 +841,97 @@ function sanitizeVarName(str: string): string {
     .toLowerCase();
 }
 
-function mapDataTypeToTs(type: string, customTypes?: import('../types').CustomTypeDefinition[]): string {
-  const custom = customTypes?.find(ct => ct.id === type || ct.name === type);
+function mapDataTypeToTs(
+  type: string,
+  customTypes?: import('../types').CustomTypeDefinition[],
+): string {
+  const custom = customTypes?.find((ct) => ct.id === type || ct.name === type);
   if (custom) return custom.name;
 
   switch (type) {
-    case 'number': return 'number';
-    case 'string': return 'string';
-    case 'boolean': return 'boolean';
-    case 'array': return 'any[]';
-    case 'object': return 'Record<string, any>';
-    case 'promise': return 'Promise<any>';
-    case 'stream': return 'AsyncIterable<any>';
-    default: return 'any';
+    case 'number':
+      return 'number';
+    case 'string':
+      return 'string';
+    case 'boolean':
+      return 'boolean';
+    case 'array':
+      return 'any[]';
+    case 'object':
+      return 'Record<string, any>';
+    case 'promise':
+      return 'Promise<any>';
+    case 'stream':
+      return 'AsyncIterable<any>';
+    default:
+      return 'any';
   }
 }
 
 function getPureFunctionInlineCode(typeId: string, inputsVar: string): string {
   switch (typeId) {
-    case 'math/add': return `{ result: (${inputsVar}.a ?? 0) + (${inputsVar}.b ?? 0) }`;
-    case 'math/subtract': return `{ result: (${inputsVar}.a ?? 0) - (${inputsVar}.b ?? 0) }`;
-    case 'math/multiply': return `{ result: (${inputsVar}.a ?? 0) * (${inputsVar}.b ?? 0) }`;
-    case 'math/divide': return `{ result: (${inputsVar}.b !== 0 ? (${inputsVar}.a ?? 0) / ${inputsVar}.b : 0) }`;
-    case 'math/modulo': return `{ result: (${inputsVar}.a ?? 0) % (${inputsVar}.b || 1) }`;
-    case 'math/power': return `{ result: Math.pow(${inputsVar}.base ?? 0, ${inputsVar}.exponent ?? 1) }`;
-    case 'math/round': return `{ result: Math.round(${inputsVar}.value ?? 0) }`;
-    case 'math/abs': return `{ result: Math.abs(${inputsVar}.value ?? 0) }`;
+    case 'math/add':
+      return `{ result: (${inputsVar}.a ?? 0) + (${inputsVar}.b ?? 0) }`;
+    case 'math/subtract':
+      return `{ result: (${inputsVar}.a ?? 0) - (${inputsVar}.b ?? 0) }`;
+    case 'math/multiply':
+      return `{ result: (${inputsVar}.a ?? 0) * (${inputsVar}.b ?? 0) }`;
+    case 'math/divide':
+      return `{ result: (${inputsVar}.b !== 0 ? (${inputsVar}.a ?? 0) / ${inputsVar}.b : 0) }`;
+    case 'math/modulo':
+      return `{ result: (${inputsVar}.a ?? 0) % (${inputsVar}.b || 1) }`;
+    case 'math/power':
+      return `{ result: Math.pow(${inputsVar}.base ?? 0, ${inputsVar}.exponent ?? 1) }`;
+    case 'math/round':
+      return `{ result: Math.round(${inputsVar}.value ?? 0) }`;
+    case 'math/abs':
+      return `{ result: Math.abs(${inputsVar}.value ?? 0) }`;
 
-    case 'string/concat': return `{ result: String(${inputsVar}.a ?? '') + String(${inputsVar}.b ?? '') }`;
-    case 'string/template': return `{ result: String(${inputsVar}.template ?? '').replace(/\\{a\\}/g, String(${inputsVar}.a ?? '')).replace(/\\{b\\}/g, String(${inputsVar}.b ?? '')) }`;
-    case 'string/uppercase': return `{ result: String(${inputsVar}.text ?? '').toUpperCase() }`;
-    case 'string/lowercase': return `{ result: String(${inputsVar}.text ?? '').toLowerCase() }`;
-    case 'string/split': return `{ result: String(${inputsVar}.text ?? '').split(String(${inputsVar}.separator ?? ',')) }`;
-    case 'string/length': return `{ result: String(${inputsVar}.text ?? '').length }`;
+    case 'string/concat':
+      return `{ result: String(${inputsVar}.a ?? '') + String(${inputsVar}.b ?? '') }`;
+    case 'string/template':
+      return `{ result: String(${inputsVar}.template ?? '').replace(/\\{a\\}/g, String(${inputsVar}.a ?? '')).replace(/\\{b\\}/g, String(${inputsVar}.b ?? '')) }`;
+    case 'string/uppercase':
+      return `{ result: String(${inputsVar}.text ?? '').toUpperCase() }`;
+    case 'string/lowercase':
+      return `{ result: String(${inputsVar}.text ?? '').toLowerCase() }`;
+    case 'string/split':
+      return `{ result: String(${inputsVar}.text ?? '').split(String(${inputsVar}.separator ?? ',')) }`;
+    case 'string/length':
+      return `{ result: String(${inputsVar}.text ?? '').length }`;
 
-    case 'logic/and': return `{ result: Boolean(${inputsVar}.a && ${inputsVar}.b) }`;
-    case 'logic/or': return `{ result: Boolean(${inputsVar}.a || ${inputsVar}.b) }`;
-    case 'logic/not': return `{ result: !Boolean(${inputsVar}.value) }`;
-    case 'logic/compare': return `{ result: Boolean(${inputsVar}.a > ${inputsVar}.b) }`;
-    case 'logic/branch': return `{ result: ${inputsVar}.condition ? ${inputsVar}.ifTrue : ${inputsVar}.ifFalse }`;
+    case 'logic/and':
+      return `{ result: Boolean(${inputsVar}.a && ${inputsVar}.b) }`;
+    case 'logic/or':
+      return `{ result: Boolean(${inputsVar}.a || ${inputsVar}.b) }`;
+    case 'logic/not':
+      return `{ result: !Boolean(${inputsVar}.value) }`;
+    case 'logic/compare':
+      return `{ result: Boolean(${inputsVar}.a > ${inputsVar}.b) }`;
+    case 'logic/branch':
+      return `{ result: ${inputsVar}.condition ? ${inputsVar}.ifTrue : ${inputsVar}.ifFalse }`;
 
-    case 'array/create': return `{ result: [${inputsVar}.item1, ${inputsVar}.item2].filter(x => x !== undefined) }`;
-    case 'array/length': return `{ result: Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.length : 0 }`;
-    case 'array/join': return `{ result: Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.join(String(${inputsVar}.separator ?? ',')) : '' }`;
-    case 'array/map': return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.map(x => typeof x === 'number' ? x * (${inputsVar}.factor ?? 2) : x) : []) }`;
-    case 'array/filter': return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.filter(x => typeof x === 'number' && x > (${inputsVar}.threshold ?? 0)) : []) }`;
-    case 'array/slice': return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.slice(${inputsVar}.start ?? 0, ${inputsVar}.end) : []) }`;
-    case 'array/reverse': return `{ result: (Array.isArray(${inputsVar}.arr) ? [...${inputsVar}.arr].reverse() : []) }`;
-    case 'array/sum': return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.reduce((acc, c) => acc + (typeof c === 'number' ? c : 0), 0) : 0) }`;
+    case 'array/create':
+      return `{ result: [${inputsVar}.item1, ${inputsVar}.item2].filter(x => x !== undefined) }`;
+    case 'array/length':
+      return `{ result: Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.length : 0 }`;
+    case 'array/join':
+      return `{ result: Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.join(String(${inputsVar}.separator ?? ',')) : '' }`;
+    case 'array/map':
+      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.map(x => typeof x === 'number' ? x * (${inputsVar}.factor ?? 2) : x) : []) }`;
+    case 'array/filter':
+      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.filter(x => typeof x === 'number' && x > (${inputsVar}.threshold ?? 0)) : []) }`;
+    case 'array/slice':
+      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.slice(${inputsVar}.start ?? 0, ${inputsVar}.end) : []) }`;
+    case 'array/reverse':
+      return `{ result: (Array.isArray(${inputsVar}.arr) ? [...${inputsVar}.arr].reverse() : []) }`;
+    case 'array/sum':
+      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.reduce((acc, c) => acc + (typeof c === 'number' ? c : 0), 0) : 0) }`;
 
-    case 'object/create': return `{ result: { [String(${inputsVar}.key ?? 'key')]: ${inputsVar}.value } }`;
-    case 'object/get': return `{ result: ${inputsVar}.obj ? ${inputsVar}.obj[${inputsVar}.key] : undefined }`;
+    case 'object/create':
+      return `{ result: { [String(${inputsVar}.key ?? 'key')]: ${inputsVar}.value } }`;
+    case 'object/get':
+      return `{ result: ${inputsVar}.obj ? ${inputsVar}.obj[${inputsVar}.key] : undefined }`;
 
     // Async / Promise nodes
     case 'async/delay':
@@ -899,6 +960,7 @@ function getPureFunctionInlineCode(typeId: string, inputsVar: string): string {
     case 'stream/collect':
       return `await (async () => { const arr: any[] = []; for await (const item of (${inputsVar}.stream || [])) { arr.push(item); if (arr.length >= 50) break; } return { array: arr, count: arr.length }; })()`;
 
-    default: return `{ result: ${inputsVar} }`;
+    default:
+      return `{ result: ${inputsVar} }`;
   }
 }

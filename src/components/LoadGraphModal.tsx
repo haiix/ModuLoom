@@ -44,7 +44,9 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
         }
 
         if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.connections)) {
-          throw new Error('ModuLoomのプロジェクト形式ではありません（nodes または connections 配列が見つかりません）。');
+          throw new Error(
+            'ModuLoomのプロジェクト形式ではありません（nodes または connections 配列が見つかりません）。',
+          );
         }
 
         const project: FlowProjectExport = {
@@ -204,7 +206,9 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
               {currentNodeCount > 0 && (
                 <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  <span>※ 現在のキャンバス上のノード（{currentNodeCount}個）は置き換えられます</span>
+                  <span>
+                    ※ 現在のキャンバス上のノード（{currentNodeCount}個）は置き換えられます
+                  </span>
                 </div>
               )}
             </div>

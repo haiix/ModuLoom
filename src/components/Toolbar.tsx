@@ -3,7 +3,6 @@ import { PRESETS } from '../nodes/definitions';
 import { TYPE_CONFIG, DataType, CustomTypeDefinition } from '../types';
 import {
   Play,
-  RotateCcw,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -25,7 +24,6 @@ interface ToolbarProps {
   onSelectPreset: (presetId: string) => void;
   onClearGraph: () => void;
   onOpenLibrary: () => void;
-  onOpenCustomNodeModal: () => void;
   onOpenCustomTypeModal: () => void;
   onExportJson: () => void;
   onOpenLoadModal: () => void;
@@ -54,7 +52,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onSelectPreset,
   onClearGraph,
   onOpenLibrary,
-  onOpenCustomNodeModal,
   onOpenCustomTypeModal,
   onExportJson,
   onOpenLoadModal,
@@ -208,7 +205,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }`}
             title={`差分評価: 変更のあったノードと下流ノード(${evalStats.dirtyCount}件)のみを再計算し、影響のないノード(${evalStats.totalCount - evalStats.dirtyCount}件)はキャッシュを再利用しています`}
           >
-            <Zap className={`w-3 h-3 shrink-0 ${evalStats.dirtyCount < evalStats.totalCount ? 'text-blue-500 animate-pulse' : 'text-slate-400'}`} />
+            <Zap
+              className={`w-3 h-3 shrink-0 ${evalStats.dirtyCount < evalStats.totalCount ? 'text-blue-500 animate-pulse' : 'text-slate-400'}`}
+            />
             <span>
               {evalStats.dirtyCount < evalStats.totalCount
                 ? `差分再計算: ${evalStats.dirtyCount}/${evalStats.totalCount} ノード`
@@ -274,9 +273,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                         {t}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400">
-                      {t === 'any' ? '変換用' : t}
-                    </span>
+                    <span className="text-[10px] text-slate-400">{t === 'any' ? '変換用' : t}</span>
                   </div>
                 ))}
               </div>

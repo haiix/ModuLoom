@@ -8,10 +8,7 @@ import {
   FlowProjectExport,
 } from './types';
 import { BUILTIN_NODES, PRESETS } from './nodes/definitions';
-import {
-  INITIAL_CUSTOM_TYPES,
-  generateNodesForCustomType,
-} from './nodes/customTypeNodes';
+import { INITIAL_CUSTOM_TYPES, generateNodesForCustomType } from './nodes/customTypeNodes';
 import {
   evaluateGraph,
   evaluateGraphAsync,
@@ -122,7 +119,7 @@ export default function App() {
       prevSnapshot.nodes,
       nodes,
       prevSnapshot.connections,
-      connections
+      connections,
     );
 
     // Save snapshot for next update
@@ -155,7 +152,7 @@ export default function App() {
       connections,
       definitionsMap,
       evaluationRef.current,
-      dirtyNodeIds
+      dirtyNodeIds,
     );
     setEvaluation(syncEval);
 
@@ -163,11 +160,7 @@ export default function App() {
     const hasDirtyAsyncOrStream = nodes.some((n) => {
       if (dirtyNodeIds && !dirtyNodeIds.has(n.id)) return false;
       const def = definitionsMap.get(n.typeId);
-      return (
-        def?.isAsync ||
-        def?.category === 'Async' ||
-        def?.category === 'Stream'
-      );
+      return def?.isAsync || def?.category === 'Async' || def?.category === 'Stream';
     });
 
     if (!hasDirtyAsyncOrStream) return;
@@ -191,7 +184,7 @@ export default function App() {
           },
         }));
       },
-      () => cancelled
+      () => cancelled,
     ).then((finalEval) => {
       if (!cancelled) {
         setEvaluation(finalEval);
@@ -236,29 +229,21 @@ export default function App() {
 
   // Handlers for Canvas & Graph Manipulation
   const handleUpdateNodePosition = (id: string, x: number, y: number) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, x, y } : n))
-    );
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
   };
 
   const handleUpdateNodeState = (id: string, newState: any) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, state: newState } : n))
-    );
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, state: newState } : n)));
   };
 
   const handleUpdateNodeLabel = (id: string, customLabel: string) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, customLabel } : n))
-    );
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, customLabel } : n)));
   };
 
   const handleDeleteNode = (id: string) => {
     setNodes((prev) => prev.filter((n) => n.id !== id));
     // Clean up associated connections
-    setConnections((prev) =>
-      prev.filter((c) => c.fromNodeId !== id && c.toNodeId !== id)
-    );
+    setConnections((prev) => prev.filter((c) => c.fromNodeId !== id && c.toNodeId !== id));
     if (stepIndex !== null) setStepIndex(null);
   };
 
@@ -280,28 +265,18 @@ export default function App() {
         delete prevEval[id];
       }
 
-      const syncEval = evaluateGraph(
-        nodes,
-        connections,
-        definitionsMap,
-        prevEval,
-        dirtyNodeIds
-      );
+      const syncEval = evaluateGraph(nodes, connections, definitionsMap, prevEval, dirtyNodeIds);
       setEvaluation(syncEval);
 
       // Check for async/stream nodes among dirty nodes
       const hasDirtyAsyncOrStream = nodes.some((n) => {
         if (!dirtyNodeIds.has(n.id)) return false;
         const def = definitionsMap.get(n.typeId);
-        return (
-          def?.isAsync ||
-          def?.category === 'Async' ||
-          def?.category === 'Stream'
-        );
+        return def?.isAsync || def?.category === 'Async' || def?.category === 'Stream';
       });
 
       if (hasDirtyAsyncOrStream) {
-        let cancelled = false;
+        const cancelled = false;
         evaluateGraphAsync(
           nodes,
           connections,
@@ -318,7 +293,7 @@ export default function App() {
               },
             }));
           },
-          () => cancelled
+          () => cancelled,
         ).then((finalEval) => {
           if (!cancelled) {
             setEvaluation(finalEval);
@@ -326,7 +301,7 @@ export default function App() {
         });
       }
     },
-    [nodes, connections, definitionsMap]
+    [nodes, connections, definitionsMap],
   );
 
   const handleAddConnection = (newConn: Connection) => {
@@ -429,7 +404,7 @@ export default function App() {
 
   // Composite Node Handlers: Grouping into composite function & Unpacking
   const handleInsertTerminalSampleNodes = (
-    sampleType: 'multiply-partial' | 'vector-hypot' = 'multiply-partial'
+    sampleType: 'multiply-partial' | 'vector-hypot' = 'multiply-partial',
   ) => {
     const containerEl = document.querySelector('main');
     const bounds = containerEl?.getBoundingClientRect();
@@ -627,7 +602,7 @@ export default function App() {
   const handleSaveComposite = (
     compositeDef: NodeDefinition,
     replaceCanvas: boolean,
-    targetNodeIds: string[]
+    targetNodeIds: string[],
   ) => {
     // 1. Save definition in customDefinitions
     setCustomDefinitions((prev) => {
@@ -763,7 +738,7 @@ export default function App() {
   };
 
   // Export JSON project file (Local Download)
-  const handleExportJson = () => {
+  const handleExportJson = useCallback(() => {
     const projectData: FlowProjectExport = {
       version: '1.0.0',
       appName: 'ModuLoom Project',
@@ -786,7 +761,7 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
+  }, [connections, customDefinitions, customTypes, nodes, pan, zoom]);
 
   // Load JSON project from local file
   const handleLoadProject = (project: FlowProjectExport) => {
@@ -820,7 +795,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, connections, customTypes, customDefinitions, zoom, pan]);
+  }, [handleExportJson]);
 
   // Zoom helpers
   const handleZoomIn = () => setZoom((z) => Math.min(z * 1.15, 2.2));
@@ -887,7 +862,6 @@ export default function App() {
         onSelectPreset={handleSelectPreset}
         onClearGraph={handleClearGraph}
         onOpenLibrary={() => setIsLibraryOpen((o) => !o)}
-        onOpenCustomNodeModal={() => setIsCustomModalOpen(true)}
         onOpenCustomTypeModal={() => setIsCustomTypeModalOpen(true)}
         onOpenCreateCompositeModal={() => setIsCreateCompositeOpen(true)}
         onExportJson={handleExportJson}
@@ -956,7 +930,6 @@ export default function App() {
               definitions={definitionsMap}
               evaluation={evaluation}
               stepIndex={stepIndex}
-              isStepping={stepIndex !== null}
               customTypes={customTypes}
               onStepNext={handleStepNext}
               onResetStep={handleResetStep}

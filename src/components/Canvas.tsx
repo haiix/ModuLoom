@@ -4,7 +4,6 @@ import {
   NodeDefinition,
   NodeInstance,
   GraphEvaluation,
-  TYPE_CONFIG,
   DataType,
   CustomTypeDefinition,
   getTypeStyle,
@@ -92,9 +91,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   } | null>(null);
 
   // Port coordinates cache for wire drawing
-  const [portPositions, setPortPositions] = useState<
-    Record<string, { x: number; y: number }>
-  >({});
+  const [portPositions, setPortPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   // Helper to re-measure port positions from DOM
   const updatePortPositions = useCallback(() => {
@@ -218,23 +215,21 @@ export const Canvas: React.FC<CanvasProps> = ({
     e: React.MouseEvent,
     nodeId: string,
     portId: string,
-    isOutput: boolean
+    isOutput: boolean,
   ) => {
     if (!isOutput) return; // Connections originate from outputs
 
     const node = nodes.find((n) => n.id === nodeId);
     const def = node ? definitions.get(node.typeId) : null;
     const port = def?.outputs.find((p) => p.id === portId);
-    if (!port || !containerRef.current) return;
+    if (!node || !port || !containerRef.current) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const startX = (e.clientX - containerRect.left - pan.x) / zoom;
     const startY = (e.clientY - containerRect.top - pan.y) / zoom;
 
     const fromType =
-      node.typeId === 'composite/input-port'
-        ? node.state?.portType || port.type
-        : port.type;
+      node.typeId === 'composite/input-port' ? node.state?.portType || port.type : port.type;
 
     setDraggingWire({
       fromNodeId: nodeId,
@@ -253,7 +248,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     _e: React.MouseEvent,
     toNodeId: string,
     toPortId: string,
-    isOutput: boolean
+    isOutput: boolean,
   ) => {
     if (!draggingWire) return;
     if (isOutput) {
@@ -267,7 +262,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     const toDef = toNode ? definitions.get(toNode.typeId) : null;
     const toPort = toDef?.inputs.find((p) => p.id === toPortId);
 
-    if (!toPort) {
+    if (!toNode || !toPort) {
       setDraggingWire(null);
       setWireHoverHint(null);
       return;
@@ -296,7 +291,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     // Remove any existing connection to this specific input port (Constraint: 1 input has max 1 connection)
     const existingConn = connections.find(
-      (c) => c.toNodeId === toNodeId && c.toPortId === toPortId
+      (c) => c.toNodeId === toNodeId && c.toPortId === toPortId,
     );
     if (existingConn) {
       onDeleteConnection(existingConn.id);
@@ -364,7 +359,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           const toDef = toNode ? definitions.get(toNode.typeId) : null;
           const toPort = toDef?.inputs.find((p) => p.id === targetPortId);
 
-          if (toPort) {
+          if (toNode && toPort) {
             const toType =
               toNode.typeId === 'composite/output-port'
                 ? toNode.state?.portType || toPort.type
@@ -373,14 +368,11 @@ export const Canvas: React.FC<CanvasProps> = ({
             const compatible = isTypeCompatible(draggingWire.fromType, toType, customTypes);
             const wouldLoop = wouldCreateCycle(connections, draggingWire.fromNodeId, targetNodeId);
 
-            let reason = '';
-            if (!compatible) {
-              reason = `型不一致: ${draggingWire.fromType} → ${toType}`;
-            } else if (wouldLoop) {
-              reason = '循環参照（ループ）を検出したため接続不可';
-            } else {
-              reason = `接続可能: ${draggingWire.fromType} → ${toType}`;
-            }
+            const reason = !compatible
+              ? `型不一致: ${draggingWire.fromType} → ${toType}`
+              : wouldLoop
+                ? '循環参照（ループ）を検出したため接続不可'
+                : `接続可能: ${draggingWire.fromType} → ${toType}`;
 
             setWireHoverHint({
               nodeId: targetNodeId,
@@ -408,12 +400,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   // Compute Bezier Curve Path
-  const getBezierPath = (
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number
-  ): string => {
+  const getBezierPath = (x1: number, y1: number, x2: number, y2: number): string => {
     const dx = Math.abs(x2 - x1) * 0.5;
     const curvature = Math.max(dx, 40);
     return `M ${x1} ${y1} C ${x1 + curvature} ${y1}, ${x2 - curvature} ${y2}, ${x2} ${y2}`;
@@ -465,7 +452,13 @@ export const Canvas: React.FC<CanvasProps> = ({
               <stop offset="100%" stopColor="#8b5cf6" />
             </linearGradient>
             <filter id="wire-glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#6366f1" floodOpacity="0.4" />
+              <feDropShadow
+                dx="0"
+                dy="0"
+                stdDeviation="3"
+                floodColor="#6366f1"
+                floodOpacity="0.4"
+              />
             </filter>
           </defs>
 
@@ -487,8 +480,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             // Midpoint for delete button or value badge
             const midX = (startPos.x + endPos.x) / 2;
             const midY = (startPos.y + endPos.y) / 2;
-
-            const outputValue = evaluation[conn.fromNodeId]?.outputs?.[conn.fromPortId];
 
             return (
               <g key={conn.id} className="group/wire pointer-events-auto">
@@ -562,7 +553,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   draggingWire.startX,
                   draggingWire.startY,
                   draggingWire.currentX,
-                  draggingWire.currentY
+                  draggingWire.currentY,
                 )}
                 fill="none"
                 stroke={
@@ -614,13 +605,11 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onPortMouseDown={(e, portId, isOut) =>
                   handlePortMouseDown(e, node.id, portId, isOut)
                 }
-                onPortMouseUp={(e, portId, isOut) =>
-                  handlePortMouseUp(e, node.id, portId, isOut)
+                onPortMouseUp={(e, portId, isOut) => handlePortMouseUp(e, node.id, portId, isOut)}
+                connectedPorts={
+                  connectedPortsMap[node.id] || { inputs: new Set(), outputs: new Set() }
                 }
-                connectedPorts={connectedPortsMap[node.id] || { inputs: new Set(), outputs: new Set() }}
-                dragWireTargetHover={
-                  wireHoverHint?.nodeId === node.id ? wireHoverHint : null
-                }
+                dragWireTargetHover={wireHoverHint?.nodeId === node.id ? wireHoverHint : null}
               />
             </div>
           );

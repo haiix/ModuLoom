@@ -15,14 +15,14 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
       f.defaultValue !== undefined
         ? JSON.parse(JSON.stringify(f.defaultValue))
         : f.type === 'number'
-        ? 0
-        : f.type === 'string'
-        ? ''
-        : f.type === 'boolean'
-        ? false
-        : f.type === 'array'
-        ? []
-        : {},
+          ? 0
+          : f.type === 'string'
+            ? ''
+            : f.type === 'boolean'
+              ? false
+              : f.type === 'array'
+                ? []
+                : {},
   }));
 
   // 1. Constructor Node: takes each field as input -> outputs the custom object
@@ -49,7 +49,8 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
       const obj: Record<string, any> = {};
       for (const field of fields) {
         const val = inputs[field.name] !== undefined ? inputs[field.name] : field.defaultValue;
-        obj[field.name] = val !== null && typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
+        obj[field.name] =
+          val !== null && typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
       }
       return { instance: obj };
     },
@@ -79,7 +80,8 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
       const res: Record<string, any> = {};
       for (const field of fields) {
         const val = obj[field.name];
-        res[field.name] = val !== null && typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
+        res[field.name] =
+          val !== null && typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
       }
       return res;
     },

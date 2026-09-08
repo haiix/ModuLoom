@@ -1,16 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BuiltinDataType, CustomTypeDefinition, CustomTypeField } from '../types';
-import {
-  X,
-  Plus,
-  Trash2,
-  Boxes,
-  Check,
-  AlertCircle,
-  Code2,
-  Edit3,
-  Copy,
-} from 'lucide-react';
+import { X, Plus, Trash2, Boxes, Check, AlertCircle, Code2, Edit3, Copy } from 'lucide-react';
 
 interface CustomTypeModalProps {
   isOpen: boolean;
@@ -49,7 +39,9 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
 
   const [typeName, setTypeName] = useState('Product');
-  const [description, setDescription] = useState('商品データモデル（ID・商品名・価格・在庫フラグ）');
+  const [description, setDescription] = useState(
+    '商品データモデル（ID・商品名・価格・在庫フラグ）',
+  );
   const [color, setColor] = useState('#ec4899');
   const [autoAddConstructor, setAutoAddConstructor] = useState(true);
   const [fields, setFields] = useState<CustomTypeField[]>(DEFAULT_NEW_FIELDS);
@@ -63,7 +55,7 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
       }
       setError(null);
     }
-  }, [isOpen]);
+  }, [editingTypeId, isOpen]);
 
   const resetFormToNew = () => {
     setEditingTypeId(null);
@@ -95,7 +87,7 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
         required: f.required ?? true,
         defaultValue:
           f.defaultValue !== undefined ? JSON.parse(JSON.stringify(f.defaultValue)) : undefined,
-      }))
+      })),
     );
     setActiveTab('create');
     setError(null);
@@ -114,7 +106,7 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
         required: f.required ?? true,
         defaultValue:
           f.defaultValue !== undefined ? JSON.parse(JSON.stringify(f.defaultValue)) : undefined,
-      }))
+      })),
     );
     setActiveTab('create');
     setError(null);
@@ -231,7 +223,8 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
             <div>
               <h3 className="font-semibold text-base">カスタム型マネージャー (Custom Types)</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                独自のデータ構造型を定義し、専用のConstructor / Deconstructor純粋関数ノードを自動生成します
+                独自のデータ構造型を定義し、専用のConstructor /
+                Deconstructor純粋関数ノードを自動生成します
               </p>
             </div>
           </div>
@@ -278,7 +271,10 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
                 <div className="p-2.5 rounded-lg bg-pink-50 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-800/60 flex items-center justify-between text-xs text-pink-700 dark:text-pink-300">
                   <div className="flex items-center gap-2">
                     <Edit3 className="w-4 h-4 text-pink-500" />
-                    <span>既存の型 <strong>{typeName}</strong> を編集中です。保存するとノード定義も更新されます。</span>
+                    <span>
+                      既存の型 <strong>{typeName}</strong>{' '}
+                      を編集中です。保存するとノード定義も更新されます。
+                    </span>
                   </div>
                   <button
                     onClick={resetFormToNew}
@@ -420,10 +416,12 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
                         ) : (
                           <input
                             type="text"
-                            value={typeof f.defaultValue === 'string' ? f.defaultValue : JSON.stringify(f.defaultValue ?? '')}
-                            onChange={(e) =>
-                              handleFieldChange(idx, 'defaultValue', e.target.value)
+                            value={
+                              typeof f.defaultValue === 'string'
+                                ? f.defaultValue
+                                : JSON.stringify(f.defaultValue ?? '')
                             }
+                            onChange={(e) => handleFieldChange(idx, 'defaultValue', e.target.value)}
                             className="w-full px-1.5 py-0.5 text-xs rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono truncate"
                             placeholder="初期値"
                           />
@@ -455,7 +453,10 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
                     onChange={(e) => setAutoAddConstructor(e.target.checked)}
                     className="rounded text-indigo-600"
                   />
-                  <label htmlFor="auto-add-node" className="text-slate-700 dark:text-slate-300 cursor-pointer font-medium">
+                  <label
+                    htmlFor="auto-add-node"
+                    className="text-slate-700 dark:text-slate-300 cursor-pointer font-medium"
+                  >
                     保存時にこの型の「生成ノード (Constructor)」をキャンバスに自動配置する
                   </label>
                 </div>
@@ -468,13 +469,13 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
                   <span>生成されるTypeScriptインターフェース:</span>
                 </div>
                 <pre className="p-3 rounded-lg bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto border border-slate-800">
-{`export interface ${typeName || 'CustomType'} {
+                  {`export interface ${typeName || 'CustomType'} {
 ${fields
   .map(
     (f) =>
       `  ${f.name || 'field'}${f.required ? '' : '?'}: ${
         f.type === 'array' ? 'any[]' : f.type === 'object' ? 'Record<string, any>' : f.type
-      };`
+      };`,
   )
   .join('\n')}
 }`}
@@ -525,7 +526,9 @@ ${fields
                             </span>
                           </div>
                           {ct.description && (
-                            <p className="text-xs text-slate-500 mt-0.5 truncate">{ct.description}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">
+                              {ct.description}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -576,7 +579,8 @@ ${fields
                     <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
                       <Check className="w-3.5 h-3.5" />
                       <span>
-                        自動生成済みノード: {ct.name} Constructor, {ct.name} Deconstruct, {ct.name} Validate
+                        自動生成済みノード: {ct.name} Constructor, {ct.name} Deconstruct, {ct.name}{' '}
+                        Validate
                       </span>
                     </div>
                   </div>
