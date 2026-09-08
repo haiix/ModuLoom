@@ -38,6 +38,16 @@ import {
   undoEditorHistory,
   type EditorDocument,
 } from './engine/editorHistory';
+import {
+  alignSelectedNodes,
+  createGraphClipboard,
+  deleteSelectedGraph,
+  distributeSelectedNodes,
+  pasteGraphClipboard,
+  type Alignment,
+  type Distribution,
+  type GraphClipboard,
+} from './engine/graphEditing';
 
 export default function App() {
   // Empty graph as initial state (no sample nodes by default)
@@ -51,6 +61,9 @@ export default function App() {
   );
   const { nodes, connections, customDefinitions, customTypes } = editorHistory.present;
   const isDirty = isEditorDocumentDirty(editorHistory);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  const graphClipboardRef = useRef<GraphClipboard | null>(null);
+  const pasteCountRef = useRef(0);
 
   const updateEditorDocument = useCallback(
     (update: (document: EditorDocument) => EditorDocument, groupKey?: string) => {
@@ -280,19 +293,25 @@ export default function App() {
   }, [isPlayingStep, topoOrder.length]);
 
   // Handlers for Canvas & Graph Manipulation
-  const handleUpdateNodePosition = (id: string, x: number, y: number) => {
-    updateEditorDocument(
-      (document) => ({
-        ...document,
-        nodes: document.nodes.map((node) => (node.id === id ? { ...node, x, y } : node)),
-      }),
-      `drag:${id}`,
-    );
-  };
-
   const handleFinishNodeDrag = useCallback(() => {
     setEditorHistory(finishEditorHistoryGroup);
   }, []);
+
+  const handleUpdateNodePositions = useCallback(
+    (positions: Map<string, { x: number; y: number }>) => {
+      updateEditorDocument(
+        (document) => ({
+          ...document,
+          nodes: document.nodes.map((node) => {
+            const position = positions.get(node.id);
+            return position ? { ...node, ...position } : node;
+          }),
+        }),
+        'drag:selection',
+      );
+    },
+    [updateEditorDocument],
+  );
 
   const handleUpdateNodeState = (id: string, newState: any) => {
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, state: newState } : n)));
@@ -310,6 +329,11 @@ export default function App() {
         (connection) => connection.fromNodeId !== id && connection.toNodeId !== id,
       ),
     }));
+    setSelectedNodeIds((selected) => {
+      const next = new Set(selected);
+      next.delete(id);
+      return next;
+    });
     if (stepIndex !== null) setStepIndex(null);
   };
 
@@ -383,6 +407,77 @@ export default function App() {
   const handleDeleteConnection = (connId: string) => {
     setConnections((prev) => prev.filter((c) => c.id !== connId));
   };
+
+  const handleCopySelection = useCallback(() => {
+    if (selectedNodeIds.size === 0) return;
+    graphClipboardRef.current = createGraphClipboard(nodes, connections, selectedNodeIds);
+    pasteCountRef.current = 0;
+  }, [connections, nodes, selectedNodeIds]);
+
+  const handlePasteSelection = useCallback(() => {
+    const clipboard = graphClipboardRef.current;
+    if (!clipboard || clipboard.nodes.length === 0) return;
+    pasteCountRef.current += 1;
+    let sequence = 0;
+    const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const pasted = pasteGraphClipboard(
+      clipboard,
+      nodes,
+      connections,
+      (kind) => `${kind === 'node' ? 'n' : 'conn'}_copy_${stamp}_${sequence++}`,
+      { x: 40 * pasteCountRef.current, y: 40 * pasteCountRef.current },
+    );
+    updateEditorDocument((document) => ({
+      ...document,
+      nodes: pasted.nodes,
+      connections: pasted.connections,
+    }));
+    setSelectedNodeIds(pasted.selectedNodeIds);
+  }, [connections, nodes, updateEditorDocument]);
+
+  const handleDuplicateSelection = useCallback(() => {
+    if (selectedNodeIds.size === 0) return;
+    graphClipboardRef.current = createGraphClipboard(nodes, connections, selectedNodeIds);
+    pasteCountRef.current = 0;
+    handlePasteSelection();
+  }, [connections, handlePasteSelection, nodes, selectedNodeIds]);
+
+  const handleDeleteSelection = useCallback(() => {
+    if (selectedNodeIds.size === 0) return;
+    updateEditorDocument((document) => ({
+      ...document,
+      ...deleteSelectedGraph(document.nodes, document.connections, selectedNodeIds),
+    }));
+    setSelectedNodeIds(new Set());
+  }, [selectedNodeIds, updateEditorDocument]);
+
+  const handleAlignSelection = useCallback(
+    (alignment: Alignment) => {
+      updateEditorDocument((document) => ({
+        ...document,
+        nodes: alignSelectedNodes(document.nodes, selectedNodeIds, alignment),
+      }));
+    },
+    [selectedNodeIds, updateEditorDocument],
+  );
+
+  const handleDistributeSelection = useCallback(
+    (distribution: Distribution) => {
+      updateEditorDocument((document) => ({
+        ...document,
+        nodes: distributeSelectedNodes(document.nodes, selectedNodeIds, distribution),
+      }));
+    },
+    [selectedNodeIds, updateEditorDocument],
+  );
+
+  useEffect(() => {
+    const existingIds = new Set(nodes.map(({ id }) => id));
+    setSelectedNodeIds((selected) => {
+      const next = new Set([...selected].filter((id) => existingIds.has(id)));
+      return next.size === selected.size ? selected : next;
+    });
+  }, [nodes]);
 
   const handleAddNode = (typeId: string, customDef?: NodeDefinition) => {
     const def = customDef || definitionsMap.get(typeId);
@@ -882,13 +977,27 @@ export default function App() {
   // Project and history shortcuts. Form controls retain their native undo/redo behavior.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
       const target = e.target as HTMLElement | null;
       const isEditing = Boolean(
         target?.closest('input, textarea, select, [contenteditable="true"]'),
       );
       const key = e.key.toLowerCase();
-      if (!isEditing && key === 'z') {
+      if (!isEditing && (key === 'delete' || key === 'backspace')) {
+        e.preventDefault();
+        handleDeleteSelection();
+        return;
+      }
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (!isEditing && key === 'a') {
+        e.preventDefault();
+        setSelectedNodeIds(new Set(nodes.map(({ id }) => id)));
+      } else if (!isEditing && key === 'c') {
+        e.preventDefault();
+        handleCopySelection();
+      } else if (!isEditing && key === 'v') {
+        e.preventDefault();
+        handlePasteSelection();
+      } else if (!isEditing && key === 'z') {
         e.preventDefault();
         if (e.shiftKey) handleRedo();
         else handleUndo();
@@ -905,7 +1014,15 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleExportJson, handleRedo, handleUndo]);
+  }, [
+    handleCopySelection,
+    handleDeleteSelection,
+    handleExportJson,
+    handlePasteSelection,
+    handleRedo,
+    handleUndo,
+    nodes,
+  ]);
 
   // Zoom helpers
   const handleZoomIn = () => setZoom((z) => Math.min(z * 1.15, 2.2));
@@ -1016,7 +1133,9 @@ export default function App() {
           evaluation={evaluation}
           stepActiveNodeId={stepActiveNodeId}
           customTypes={customTypes}
-          onUpdateNodePosition={handleUpdateNodePosition}
+          selectedNodeIds={selectedNodeIds}
+          onSelectionChange={setSelectedNodeIds}
+          onUpdateNodePositions={handleUpdateNodePositions}
           onFinishNodeDrag={handleFinishNodeDrag}
           onUpdateNodeState={handleUpdateNodeState}
           onUpdateNodeLabel={handleUpdateNodeLabel}
@@ -1025,6 +1144,11 @@ export default function App() {
           onUnpackComposite={handleUnpackComposite}
           onAddConnection={handleAddConnection}
           onDeleteConnection={handleDeleteConnection}
+          onCopySelection={handleCopySelection}
+          onDuplicateSelection={handleDuplicateSelection}
+          onDeleteSelection={handleDeleteSelection}
+          onAlignSelection={handleAlignSelection}
+          onDistributeSelection={handleDistributeSelection}
           zoom={zoom}
           pan={pan}
           onUpdateZoomPan={(newZoom, newPan) => {
