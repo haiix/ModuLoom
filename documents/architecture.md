@@ -9,7 +9,7 @@ React UI
   ├─ App: グラフ・評価結果・表示状態の統合
   ├─ Canvas / NodeView: 編集と結果表示
   ├─ NodeLibrary / 各種モーダル: 定義の作成
-  └─ Toolbar / TopologicalVisualizer: 操作と実行順表示
+  └─ Toolbar / CanvasControls / TopologicalVisualizer: 操作と実行順表示
           │
           ▼
 Graph model (NodeInstance + Connection + NodeDefinition)
@@ -148,20 +148,27 @@ type BuiltinDataType =
 
 永続化はダウンロードする JSON のみです。関数はJSON化できないため、自作ノードは `customCode`、複合ノードは `compositeSubgraph` を保存します。読み込み時は `projectFormat.ts` が形式とグラフ整合性を検証し、自作ノードの `customCode` から `evaluate` 関数を再構成します。複合ノードは評価エンジンがサブグラフを直接扱います。
 
+## レスポンシブ操作UI
+
+`Toolbar` はノード追加、保存、読み込み、実行を常設し、補助操作を単一のオーバーフローメニューへまとめます。`toolbarLayout.ts` が画面幅からブランド名と操作ラベルの表示密度を決め、ヘッダー自体は折り返しません。評価方式と表示倍率は `CanvasControls` としてキャンバス右下へ分離しています。アイコンだけになる操作も `aria-label` を持ち、オーバーフローメニューは開閉、フォーカス移動、選択をキーボードで実行できます。
+
 ## 主要ファイル
 
-| ファイル                        | 責務                                         |
-| ------------------------------- | -------------------------------------------- |
-| `src/App.tsx`                   | 状態統合、差分評価、操作ハンドラー、画面構成 |
-| `src/types.ts`                  | グラフ、型、評価結果、保存形式の型定義       |
-| `src/engine/dagEngine.ts`       | DAG 操作、同期・非同期評価、複合評価、TS生成 |
-| `src/engine/typeSystem.ts`      | 型互換性、値型判定、表示整形                 |
-| `src/engine/streamEngine.ts`    | Promise／AsyncIterator ヘルパー              |
-| `src/engine/editorHistory.ts`   | 編集履歴、Undo／Redo、未保存判定             |
-| `src/engine/graphEditing.ts`    | 複数選択のコピー、移動、削除、整列           |
-| `src/nodes/definitions.ts`      | 同期組み込みノードとプリセット               |
-| `src/nodes/asyncStreamNodes.ts` | 非同期・ストリームノード                     |
-| `src/nodes/customTypeNodes.ts`  | カスタム型由来ノードとコード生成定義         |
-| `src/nodes/codegen.ts`          | 組み込みノードのコード生成メタデータ         |
-| `src/components/Canvas.tsx`     | キャンバス操作、接続検証、ワイヤー描画       |
-| `src/components/NodeView.tsx`   | ノードフォーム、ポート、状態・結果表示       |
+| ファイル                            | 責務                                         |
+| ----------------------------------- | -------------------------------------------- |
+| `src/App.tsx`                       | 状態統合、差分評価、操作ハンドラー、画面構成 |
+| `src/types.ts`                      | グラフ、型、評価結果、保存形式の型定義       |
+| `src/engine/dagEngine.ts`           | DAG 操作、同期・非同期評価、複合評価、TS生成 |
+| `src/engine/typeSystem.ts`          | 型互換性、値型判定、表示整形                 |
+| `src/engine/streamEngine.ts`        | Promise／AsyncIterator ヘルパー              |
+| `src/engine/editorHistory.ts`       | 編集履歴、Undo／Redo、未保存判定             |
+| `src/engine/graphEditing.ts`        | 複数選択のコピー、移動、削除、整列           |
+| `src/nodes/definitions.ts`          | 同期組み込みノードとプリセット               |
+| `src/nodes/asyncStreamNodes.ts`     | 非同期・ストリームノード                     |
+| `src/nodes/customTypeNodes.ts`      | カスタム型由来ノードとコード生成定義         |
+| `src/nodes/codegen.ts`              | 組み込みノードのコード生成メタデータ         |
+| `src/components/Canvas.tsx`         | キャンバス操作、接続検証、ワイヤー描画       |
+| `src/components/NodeView.tsx`       | ノードフォーム、ポート、状態・結果表示       |
+| `src/components/Toolbar.tsx`        | 常設操作とレスポンシブな補助操作メニュー     |
+| `src/components/CanvasControls.tsx` | 評価方式、実行、ズームなどのキャンバス操作   |
+| `src/components/toolbarLayout.ts`   | 画面幅に応じたツールバー表示密度             |

@@ -20,6 +20,7 @@ import {
 } from './engine/dagEngine';
 import { Canvas } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
+import { CanvasControls } from './components/CanvasControls';
 import { NodeLibrary } from './components/NodeLibrary';
 import { LoadGraphModal } from './components/LoadGraphModal';
 import { CustomNodeModal } from './components/CustomNodeModal';
@@ -1110,18 +1111,22 @@ export default function App() {
         onRedo={handleRedo}
         customTypes={customTypes}
         onOpenCodeExportModal={() => setIsCodeExportModalOpen(true)}
-        isLiveReactive={isLiveReactive}
-        onToggleLiveReactive={() => setIsLiveReactive((r) => !r)}
         onManualReevaluate={() => setManualEvalTrigger((t) => t + 1)}
-        evalStats={evalStats}
         showDagViewer={showDagViewer}
         onToggleDagViewer={() => setShowDagViewer((v) => !v)}
+        nodeCount={nodes.length}
+      />
+
+      <CanvasControls
+        isLiveReactive={isLiveReactive}
+        onToggleLiveReactive={() => setIsLiveReactive((value) => !value)}
+        onRun={() => setManualEvalTrigger((value) => value + 1)}
+        evalStats={evalStats}
         zoom={zoom}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
         onFitView={handleFitView}
-        nodeCount={nodes.length}
       />
 
       {/* Main Canvas Workspace */}
