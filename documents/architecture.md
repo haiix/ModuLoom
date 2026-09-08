@@ -152,23 +152,29 @@ type BuiltinDataType =
 
 `Toolbar` はノード追加、保存、読み込み、実行を常設し、補助操作を単一のオーバーフローメニューへまとめます。`toolbarLayout.ts` が画面幅からブランド名と操作ラベルの表示密度を決め、ヘッダー自体は折り返しません。評価方式と表示倍率は `CanvasControls` としてキャンバス右下へ分離しています。アイコンだけになる操作も `aria-label` を持ち、オーバーフローメニューは開閉、フォーカス移動、選択をキーボードで実行できます。
 
+## オンボーディング
+
+`OnboardingGuide` はモーダルではなくキャンバス左下の非遮蔽パネルとして表示します。`onboarding.ts` の純粋な進行判定がノード定義の `kind`、接続、出力ノードの評価結果から入力配置、処理配置、出力配置、接続、実行、成功の段階を決めます。スキップまたは完了は `moduloom:onboarding-status` として Local Storage に保存し、ツールバーからの再表示は保存済み状態を変更せず現在のセッションだけで行います。完成サンプルへの導線は、公式プリセットの安定したID `math-calc` に限定しています。
+
 ## 主要ファイル
 
-| ファイル                            | 責務                                         |
-| ----------------------------------- | -------------------------------------------- |
-| `src/App.tsx`                       | 状態統合、差分評価、操作ハンドラー、画面構成 |
-| `src/types.ts`                      | グラフ、型、評価結果、保存形式の型定義       |
-| `src/engine/dagEngine.ts`           | DAG 操作、同期・非同期評価、複合評価、TS生成 |
-| `src/engine/typeSystem.ts`          | 型互換性、値型判定、表示整形                 |
-| `src/engine/streamEngine.ts`        | Promise／AsyncIterator ヘルパー              |
-| `src/engine/editorHistory.ts`       | 編集履歴、Undo／Redo、未保存判定             |
-| `src/engine/graphEditing.ts`        | 複数選択のコピー、移動、削除、整列           |
-| `src/nodes/definitions.ts`          | 同期組み込みノードとプリセット               |
-| `src/nodes/asyncStreamNodes.ts`     | 非同期・ストリームノード                     |
-| `src/nodes/customTypeNodes.ts`      | カスタム型由来ノードとコード生成定義         |
-| `src/nodes/codegen.ts`              | 組み込みノードのコード生成メタデータ         |
-| `src/components/Canvas.tsx`         | キャンバス操作、接続検証、ワイヤー描画       |
-| `src/components/NodeView.tsx`       | ノードフォーム、ポート、状態・結果表示       |
-| `src/components/Toolbar.tsx`        | 常設操作とレスポンシブな補助操作メニュー     |
-| `src/components/CanvasControls.tsx` | 評価方式、実行、ズームなどのキャンバス操作   |
-| `src/components/toolbarLayout.ts`   | 画面幅に応じたツールバー表示密度             |
+| ファイル                             | 責務                                         |
+| ------------------------------------ | -------------------------------------------- |
+| `src/App.tsx`                        | 状態統合、差分評価、操作ハンドラー、画面構成 |
+| `src/types.ts`                       | グラフ、型、評価結果、保存形式の型定義       |
+| `src/engine/dagEngine.ts`            | DAG 操作、同期・非同期評価、複合評価、TS生成 |
+| `src/engine/typeSystem.ts`           | 型互換性、値型判定、表示整形                 |
+| `src/engine/streamEngine.ts`         | Promise／AsyncIterator ヘルパー              |
+| `src/engine/editorHistory.ts`        | 編集履歴、Undo／Redo、未保存判定             |
+| `src/engine/graphEditing.ts`         | 複数選択のコピー、移動、削除、整列           |
+| `src/nodes/definitions.ts`           | 同期組み込みノードとプリセット               |
+| `src/nodes/asyncStreamNodes.ts`      | 非同期・ストリームノード                     |
+| `src/nodes/customTypeNodes.ts`       | カスタム型由来ノードとコード生成定義         |
+| `src/nodes/codegen.ts`               | 組み込みノードのコード生成メタデータ         |
+| `src/components/Canvas.tsx`          | キャンバス操作、接続検証、ワイヤー描画       |
+| `src/components/NodeView.tsx`        | ノードフォーム、ポート、状態・結果表示       |
+| `src/components/Toolbar.tsx`         | 常設操作とレスポンシブな補助操作メニュー     |
+| `src/components/CanvasControls.tsx`  | 評価方式、実行、ズームなどのキャンバス操作   |
+| `src/components/toolbarLayout.ts`    | 画面幅に応じたツールバー表示密度             |
+| `src/components/OnboardingGuide.tsx` | 初回ガイドの表示と操作                       |
+| `src/components/onboarding.ts`       | ガイドの進行判定、保存キー、安定プリセット   |

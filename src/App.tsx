@@ -21,6 +21,12 @@ import {
 import { Canvas } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
 import { CanvasControls } from './components/CanvasControls';
+import { OnboardingGuide } from './components/OnboardingGuide';
+import {
+  ONBOARDING_STORAGE_KEY,
+  shouldShowOnboarding,
+  STARTER_PRESET_ID,
+} from './components/onboarding';
 import { NodeLibrary } from './components/NodeLibrary';
 import { LoadGraphModal } from './components/LoadGraphModal';
 import { CustomNodeModal } from './components/CustomNodeModal';
@@ -112,6 +118,13 @@ export default function App() {
   const [isCodeExportModalOpen, setIsCodeExportModalOpen] = useState(false);
   const [isCreateCompositeOpen, setIsCreateCompositeOpen] = useState(false);
   const [showDagViewer, setShowDagViewer] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try {
+      return shouldShowOnboarding(window.localStorage);
+    } catch {
+      return true;
+    }
+  });
 
   // Engine evaluation settings
   const [isLiveReactive, setIsLiveReactive] = useState(true);
@@ -515,6 +528,15 @@ export default function App() {
     setPan({ x: 60, y: 80 });
     setStepIndex(null);
     setIsPlayingStep(false);
+  };
+
+  const hideOnboarding = (status: 'skipped' | 'completed') => {
+    try {
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, status);
+    } catch {
+      // The guide can still be dismissed when browser storage is unavailable.
+    }
+    setShowOnboarding(false);
   };
 
   const handleClearGraph = () => {
@@ -1114,6 +1136,7 @@ export default function App() {
         onManualReevaluate={() => setManualEvalTrigger((t) => t + 1)}
         showDagViewer={showDagViewer}
         onToggleDagViewer={() => setShowDagViewer((v) => !v)}
+        onOpenOnboarding={() => setShowOnboarding(true)}
         nodeCount={nodes.length}
       />
 
@@ -1161,7 +1184,21 @@ export default function App() {
             setPan(newPan);
           }}
           onOpenLibrary={() => setIsLibraryOpen(true)}
+          onLoadStarterPreset={() => handleSelectPreset(STARTER_PRESET_ID)}
         />
+
+        {showOnboarding && (
+          <OnboardingGuide
+            nodes={nodes}
+            connections={connections}
+            definitions={definitionsMap}
+            evaluation={evaluation}
+            onOpenLibrary={() => setIsLibraryOpen(true)}
+            onLoadStarterPreset={() => handleSelectPreset(STARTER_PRESET_ID)}
+            onSkip={() => hideOnboarding('skipped')}
+            onComplete={() => hideOnboarding('completed')}
+          />
+        )}
 
         {/* Node Library Sidebar */}
         <NodeLibrary

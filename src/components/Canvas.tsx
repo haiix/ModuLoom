@@ -40,6 +40,7 @@ interface CanvasProps {
   pan: { x: number; y: number };
   onUpdateZoomPan: (zoom: number, pan: { x: number; y: number }) => void;
   onOpenLibrary?: () => void;
+  onLoadStarterPreset?: () => void;
   onUnpackComposite?: (nodeId: string) => void;
 }
 
@@ -79,6 +80,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   pan,
   onUpdateZoomPan,
   onOpenLibrary,
+  onLoadStarterPreset,
   onUnpackComposite,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -798,14 +800,24 @@ export const Canvas: React.FC<CanvasProps> = ({
                   上部の「ノードを追加」または「その他の操作」のプリセットからノードを配置してグラフを作成できます。
                 </p>
               </div>
-              {onOpenLibrary && (
-                <button
-                  onClick={onOpenLibrary}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition shadow-xs"
-                >
-                  ノードを追加する
-                </button>
-              )}
+              <div className="flex flex-wrap justify-center gap-2">
+                {onOpenLibrary && (
+                  <button
+                    onClick={onOpenLibrary}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition shadow-xs"
+                  >
+                    ノードを追加する
+                  </button>
+                )}
+                {onLoadStarterPreset && (
+                  <button
+                    onClick={onLoadStarterPreset}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    完成サンプルを見る
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
