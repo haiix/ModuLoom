@@ -221,6 +221,18 @@ export const BUILTIN_NODES: NodeDefinition[] = [
       return { result: Math.abs(Number(inputs.value ?? 0)) };
     },
   },
+  {
+    typeId: 'math/sqrt',
+    label: 'Square Root (平方根)',
+    category: 'Math',
+    kind: 'pure',
+    description: '数値の平方根を計算。負数は NaN を返す',
+    inputs: [{ id: 'value', name: 'value', type: 'number', defaultValue: 0 }],
+    outputs: [{ id: 'result', name: 'result', type: 'number' }],
+    evaluate: (inputs) => {
+      return { result: Math.sqrt(Number(inputs.value ?? 0)) };
+    },
+  },
 
   // ==========================================
   // PURE FUNCTION NODES: STRING
