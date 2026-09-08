@@ -795,7 +795,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                   キャンバスは空です
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  上部の「ノードを追加」または「サンプルプリセット」からノードを配置してグラフを作成できます。
+                  上部の「ノードを追加」または「その他の操作」のプリセットからノードを配置してグラフを作成できます。
                 </p>
               </div>
               {onOpenLibrary && (
