@@ -7,6 +7,7 @@ import {
   CompositeSubgraph,
 } from '../types';
 import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
+import { GENERATED_STREAM_HELPERS } from '../nodes/codegen';
 
 /**
  * Checks if adding a connection from fromNodeId to toNodeId would create a cycle.
@@ -807,205 +808,211 @@ export async function evaluateGraphAsync(
   return result;
 }
 
-/**
- * Generates pure TypeScript code for the entire graph!
- */
+export class CodeGenerationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CodeGenerationError';
+  }
+}
+
+function expandCompositeNodes(
+  nodes: NodeInstance[],
+  connections: Connection[],
+  definitions: Map<string, NodeDefinition>,
+): { nodes: NodeInstance[]; connections: Connection[] } {
+  let expandedNodes = nodes.map((node) => ({ ...node }));
+  let expandedConnections = connections.map((connection) => ({ ...connection }));
+  const expansionLimit = Math.max(100, nodes.length * 20);
+
+  for (let count = 0; count < expansionLimit; count += 1) {
+    const composite = expandedNodes.find((node) => definitions.get(node.typeId)?.isComposite);
+    if (!composite) return { nodes: expandedNodes, connections: expandedConnections };
+
+    const definition = definitions.get(composite.typeId)!;
+    try {
+      const result = unpackCompositeNode(
+        expandedNodes,
+        expandedConnections,
+        composite.id,
+        definition,
+      );
+      if (result.warnings.length > 0) {
+        throw new CodeGenerationError(result.warnings.join(' '));
+      }
+      expandedNodes = result.nodes;
+      expandedConnections = result.connections;
+    } catch (error) {
+      if (error instanceof CodeGenerationError) throw error;
+      throw new CodeGenerationError(
+        `複合ノード '${composite.id}' を展開できません: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  throw new CodeGenerationError('複合ノードが再帰しているため生成を中止しました。');
+}
+
+/** Generates TypeScript using the same implementation metadata as runtime node definitions. */
 export function generateTypeScriptCode(
   nodes: NodeInstance[],
   connections: Connection[],
   definitions: Map<string, NodeDefinition>,
   customTypes?: import('../types').CustomTypeDefinition[],
 ): string {
-  const { order, hasCycle } = getTopologicalOrder(nodes, connections);
+  const expanded = expandCompositeNodes(nodes, connections, definitions);
+  const { order, hasCycle } = getTopologicalOrder(expanded.nodes, expanded.connections);
   if (hasCycle) {
-    return '// Error: Graph contains a cycle (loop). Cannot generate pure function.';
+    throw new CodeGenerationError('グラフに循環があるためTypeScriptを生成できません。');
+  }
+
+  const nodeMap = new Map(expanded.nodes.map((node) => [node.id, node]));
+  const definitionMap = new Map<string, NodeDefinition>();
+  for (const node of expanded.nodes) {
+    const definition = definitions.get(node.typeId);
+    if (!definition) {
+      throw new CodeGenerationError(`未登録のノード定義: ${node.typeId}`);
+    }
+    if (!definition.codegen && !definition.customCode) {
+      throw new CodeGenerationError(
+        `ノード '${definition.label}' (${definition.typeId}) はTypeScript出力に対応していません。`,
+      );
+    }
+    definitionMap.set(node.id, definition);
   }
 
   const incoming = new Map<string, Connection>();
-  for (const conn of connections) {
-    incoming.set(`${conn.toNodeId}:${conn.toPortId}`, conn);
+  const outgoingCount = new Map<string, number>();
+  for (const connection of expanded.connections) {
+    incoming.set(`${connection.toNodeId}:${connection.toPortId}`, connection);
+    outgoingCount.set(connection.fromNodeId, (outgoingCount.get(connection.fromNodeId) ?? 0) + 1);
   }
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-
-  // Check if any node is async or stream
-  const hasAsyncOrStream = nodes.some((n) => {
-    const def = definitions.get(n.typeId);
+  const rootInputs = expanded.nodes.filter((node) => {
+    const definition = definitionMap.get(node.id)!;
     return (
-      def?.isAsync ||
-      def?.category === 'Async' ||
-      def?.category === 'Stream' ||
-      def?.outputs.some((p) => p.type === 'promise' || p.type === 'stream') ||
-      def?.inputs.some((p) => p.type === 'promise' || p.type === 'stream')
+      definition.kind === 'input' &&
+      !definition.inputs.some((port) => incoming.has(`${node.id}:${port.id}`))
+    );
+  });
+  const outputNodes = expanded.nodes.filter(
+    (node) => definitionMap.get(node.id)!.kind === 'output' && !outgoingCount.has(node.id),
+  );
+  const hasAsyncOrStream = expanded.nodes.some((node) => {
+    const definition = definitionMap.get(node.id)!;
+    return (
+      definition.isAsync ||
+      definition.category === 'Async' ||
+      definition.category === 'Stream' ||
+      [...definition.inputs, ...definition.outputs].some(
+        (port) => port.type === 'promise' || port.type === 'stream',
+      )
     );
   });
 
-  const inputNodes = nodes.filter((n) => definitions.get(n.typeId)?.kind === 'input');
-  const outputNodes = nodes.filter((n) => definitions.get(n.typeId)?.kind === 'output');
-
-  let ts = `/**\n * Auto-generated Pure Function Pipeline\n * Built with ModuLoom Type-Safe Node Editor\n */\n\n`;
-
-  // Include Stream and Promise helpers if needed
-  if (hasAsyncOrStream) {
-    ts += `// ==========================================\n// Stream & AsyncIterator Helpers\n// ==========================================\n`;
-    ts += `export async function* createIntervalStream(intervalMs = 400, limit = 8): AsyncGenerator<number> {\n`;
-    ts += `  for (let i = 0; i < limit; i++) {\n`;
-    ts += `    await new Promise(r => setTimeout(r, Math.max(10, intervalMs)));\n`;
-    ts += `    yield i;\n`;
-    ts += `  }\n`;
-    ts += `}\n\n`;
-
-    ts += `export async function* createArrayStream<T>(items: T[], delayMs = 300): AsyncGenerator<T> {\n`;
-    ts += `  for (const item of items) {\n`;
-    ts += `    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));\n`;
-    ts += `    yield item;\n`;
-    ts += `  }\n`;
-    ts += `}\n\n`;
-
-    ts += `export async function* mapStream<T, R>(source: AsyncIterable<T>, fn: (val: T) => R | Promise<R>): AsyncGenerator<R> {\n`;
-    ts += `  for await (const item of source) {\n`;
-    ts += `    yield await fn(item);\n`;
-    ts += `  }\n`;
-    ts += `}\n\n`;
-
-    ts += `export async function* filterStream<T>(source: AsyncIterable<T>, predicate: (val: T) => boolean | Promise<boolean>): AsyncGenerator<T> {\n`;
-    ts += `  for await (const item of source) {\n`;
-    ts += `    if (await predicate(item)) yield item;\n`;
-    ts += `  }\n`;
-    ts += `}\n\n`;
-
-    ts += `export async function* takeStream<T>(source: AsyncIterable<T>, count: number): AsyncGenerator<T> {\n`;
-    ts += `  let taken = 0;\n`;
-    ts += `  for await (const item of source) {\n`;
-    ts += `    if (taken++ >= count) break;\n`;
-    ts += `    yield item;\n`;
-    ts += `  }\n`;
-    ts += `}\n\n`;
+  const nodeVariables = new Map(order.map((nodeId, index) => [nodeId, `node_${index}`]));
+  const inputNames = new Map<string, string>();
+  const usedInputNames = new Set<string>();
+  for (const node of rootInputs) {
+    const definition = definitionMap.get(node.id)!;
+    const base = sanitizeVarName(
+      String(
+        node.typeId === 'composite/input-port'
+          ? node.state?.portName
+          : node.customLabel || definition.label || node.id,
+      ),
+    );
+    let name = base || 'input';
+    let suffix = 2;
+    while (usedInputNames.has(name)) name = `${base}_${suffix++}`;
+    usedInputNames.add(name);
+    inputNames.set(node.id, name);
   }
 
-  // 1. Export Custom Type Interfaces if any exist!
-  if (customTypes && customTypes.length > 0) {
-    ts += `// ==========================================\n// Custom Type Definitions\n// ==========================================\n`;
-    for (const ct of customTypes) {
-      ts += `export interface ${ct.name} {\n`;
-      for (const field of ct.fields) {
-        const tsType = mapDataTypeToTs(field.type, customTypes);
-        ts += `  ${field.name}${field.required ? '' : '?'}: ${tsType};\n`;
+  let ts = `/**\n * Auto-generated Pure Function Pipeline\n * Built with ModuLoom Type-Safe Node Editor\n */\n\n`;
+  if (hasAsyncOrStream) ts += `${GENERATED_STREAM_HELPERS}\n`;
+
+  if (customTypes?.length) {
+    for (const customType of customTypes) {
+      ts += `export interface ${sanitizeTypeName(customType.name)} {\n`;
+      for (const field of customType.fields) {
+        ts += `  ${JSON.stringify(field.name)}${field.required ? '' : '?'}: ${mapDataTypeToTs(field.type, customTypes)};\n`;
       }
       ts += `}\n\n`;
     }
   }
 
-  // 2. Define input arguments interface
-  ts += `// ==========================================\n// Pipeline Definition\n// ==========================================\n`;
   ts += `export interface PipelineInputs {\n`;
-  if (inputNodes.length === 0) {
-    ts += `  // No input nodes configured\n`;
-  } else {
-    for (const inp of inputNodes) {
-      const def = definitions.get(inp.typeId);
-      const isCompositeInput = inp.typeId === 'composite/input-port';
-      const varName = sanitizeVarName(
-        String(isCompositeInput ? inp.state?.portName : inp.customLabel || def?.label || inp.id),
-      );
-      const outType = String(
-        isCompositeInput ? inp.state?.portType : def?.outputs[0]?.type || 'any',
-      );
-      const tsType = mapDataTypeToTs(outType, customTypes);
-      const defaultValue = isCompositeInput
-        ? inp.state?.testValue
-        : (inp.state?.value ?? inp.state);
-      ts += `  ${varName}?: ${tsType}; // Default: ${JSON.stringify(defaultValue)}\n`;
-    }
+  for (const node of rootInputs) {
+    const definition = definitionMap.get(node.id)!;
+    const outputType =
+      node.typeId === 'composite/input-port'
+        ? String(node.state?.portType ?? 'any')
+        : String(definition.outputs[0]?.type ?? 'any');
+    ts += `  ${JSON.stringify(inputNames.get(node.id)!)}?: ${mapDataTypeToTs(outputType, customTypes)};\n`;
   }
   ts += `}\n\n`;
 
-  const asyncKeyword = hasAsyncOrStream ? 'async ' : '';
-  ts += `export ${asyncKeyword}function evaluatePipeline(inputs: PipelineInputs = {}) {\n`;
-
+  ts += `export ${hasAsyncOrStream ? 'async ' : ''}function evaluatePipeline(inputs: PipelineInputs = {}) {\n`;
   for (const nodeId of order) {
-    const node = nodeMap.get(nodeId);
-    if (!node) continue;
-    const def = definitions.get(node.typeId);
-    if (!def) continue;
+    const node = nodeMap.get(nodeId)!;
+    const definition = definitionMap.get(nodeId)!;
+    const nodeVariable = nodeVariables.get(nodeId)!;
+    const inputsVariable = `${nodeVariable}_inputs`;
 
-    const nodeVar = sanitizeVarName(`node_${node.id}_${def.label}`);
+    ts += `  // ${definition.category}: ${definition.label}\n`;
+    ts += `  const ${inputsVariable}: Record<string, any> = {\n`;
+    for (const port of definition.inputs) {
+      const connection = incoming.get(`${nodeId}:${port.id}`);
+      const value = connection
+        ? `${nodeVariables.get(connection.fromNodeId)!}[${JSON.stringify(connection.fromPortId)}]`
+        : serializeValue(port.defaultValue);
+      ts += `    ${JSON.stringify(port.id)}: ${value},\n`;
+    }
+    ts += `  };\n`;
 
-    if (def.kind === 'input') {
-      const isCompositeInput = node.typeId === 'composite/input-port';
-      const varName = sanitizeVarName(
-        String(isCompositeInput ? node.state?.portName : node.customLabel || def.label || node.id),
-      );
-      const defaultValue = isCompositeInput
-        ? (node.state?.testValue ?? def.defaultState?.testValue)
-        : (node.state?.value ?? node.state ?? def.defaultState?.value);
-      const defaultVal = JSON.stringify(defaultValue);
-      const outputPortId = def.outputs[0]?.id || 'value';
-      ts += `  // Input: ${def.label}\n`;
-      ts += `  const ${nodeVar} = { ${outputPortId}: inputs.${varName} !== undefined ? inputs.${varName} : ${defaultVal} };\n\n`;
-    } else if (def.kind === 'output') {
-      const port = def.inputs[0];
-      const conn = incoming.get(`${nodeId}:${port?.id}`);
-      let sourceExpr = 'undefined';
-      if (conn) {
-        const sourceNode = nodeMap.get(conn.fromNodeId);
-        const sourceDef = definitions.get(sourceNode?.typeId || '');
-        const sourceVar = sanitizeVarName(`node_${conn.fromNodeId}_${sourceDef?.label}`);
-        sourceExpr = `${sourceVar}.${conn.fromPortId}`;
-      }
-      ts += `  // Output: ${def.label}\n`;
-      ts += `  const ${nodeVar} = { value: ${sourceExpr} };\n\n`;
+    const state = node.state ?? definition.defaultState;
+    let implementation: string;
+    if (definition.codegen) {
+      implementation = definition.codegen.emit({ inputsVar: inputsVariable, state });
     } else {
-      // Pure / Async function node
-      ts += `  // ${def.category}: ${def.label}\n`;
-      ts += `  const ${nodeVar}_inputs = {\n`;
-      for (const p of def.inputs) {
-        const conn = incoming.get(`${nodeId}:${p.id}`);
-        if (conn) {
-          const sourceNode = nodeMap.get(conn.fromNodeId);
-          const sourceDef = definitions.get(sourceNode?.typeId || '');
-          const sourceVar = sanitizeVarName(`node_${conn.fromNodeId}_${sourceDef?.label}`);
-          ts += `    ${p.id}: ${sourceVar}.${conn.fromPortId},\n`;
-        } else {
-          ts += `    ${p.id}: ${JSON.stringify(p.defaultValue)},\n`;
-        }
+      const outputPortId = definition.outputs[0]?.id;
+      if (!outputPortId) {
+        throw new CodeGenerationError(
+          `カスタムノード '${definition.label}' に出力ポートがありません。`,
+        );
       }
-      ts += `  };\n`;
+      implementation = `{ ${JSON.stringify(outputPortId)}: ((inputs: Record<string, any>) => (${definition.customCode}))(${inputsVariable}) }`;
+    }
 
-      // Call implementation
-      if (def.customCode) {
-        ts += `  const ${nodeVar} = ((inputs) => (${def.customCode}))(${nodeVar}_inputs);\n\n`;
-      } else if (def.typeId.startsWith('type/')) {
-        // Constructor / Deconstructor for custom type
-        if (def.typeId.endsWith('/constructor')) {
-          ts += `  const ${nodeVar} = { instance: { ...${nodeVar}_inputs } };\n\n`;
-        } else if (def.typeId.endsWith('/deconstruct')) {
-          ts += `  const ${nodeVar} = (${nodeVar}_inputs.instance || {});\n\n`;
-        } else if (def.typeId.endsWith('/validate')) {
-          ts += `  const ${nodeVar} = { isValid: Boolean(${nodeVar}_inputs.data), instance: ${nodeVar}_inputs.data };\n\n`;
-        } else {
-          ts += `  const ${nodeVar} = { result: ${nodeVar}_inputs };\n\n`;
-        }
-      } else {
-        ts += `  const ${nodeVar} = ${getPureFunctionInlineCode(def.typeId, `${nodeVar}_inputs`)};\n\n`;
+    if (inputNames.has(nodeId)) {
+      const outputPortId = definition.outputs[0]?.id;
+      if (!outputPortId) {
+        throw new CodeGenerationError(
+          `入力ノード '${definition.label}' に出力ポートがありません。`,
+        );
       }
+      const inputName = inputNames.get(nodeId)!;
+      ts += `  const ${nodeVariable}_default = ${implementation};\n`;
+      ts += `  const ${nodeVariable} = { ...${nodeVariable}_default, [${JSON.stringify(outputPortId)}]: inputs[${JSON.stringify(inputName)}] !== undefined ? inputs[${JSON.stringify(inputName)}] : ${nodeVariable}_default[${JSON.stringify(outputPortId)}] };\n\n`;
+    } else {
+      ts += `  const ${nodeVariable} = ${implementation};\n\n`;
     }
   }
 
-  // Return final outputs
   ts += `  return {\n`;
-  for (const out of outputNodes) {
-    const def = definitions.get(out.typeId);
-    const nodeVar = sanitizeVarName(`node_${out.id}_${def?.label}`);
-    const key = sanitizeVarName(out.customLabel || def?.label || out.id);
-    ts += `    ${key}: ${nodeVar}.value,\n`;
+  for (const node of outputNodes) {
+    const definition = definitionMap.get(node.id)!;
+    const key = node.customLabel || definition.label || node.id;
+    if (definition.outputs.length === 0) {
+      ts += `    ${JSON.stringify(key)}: ${nodeVariables.get(node.id)!}.displayedValue,\n`;
+    } else {
+      for (const output of definition.outputs) {
+        const outputKey = definition.outputs.length === 1 ? key : `${key}.${output.id}`;
+        ts += `    ${JSON.stringify(outputKey)}: ${nodeVariables.get(node.id)!}[${JSON.stringify(output.id)}],\n`;
+      }
+    }
   }
-  if (outputNodes.length === 0) {
-    ts += `    // Connect output nodes to see return values\n`;
-  }
-  ts += `  };\n`;
-  ts += `}\n`;
-
+  ts += `  };\n}\n`;
   return ts;
 }
 
@@ -1016,12 +1023,22 @@ function sanitizeVarName(str: string): string {
     .toLowerCase();
 }
 
+function sanitizeTypeName(name: string): string {
+  const sanitized = name.replace(/[^a-zA-Z0-9_$]/g, '_').replace(/^([0-9])/, '_$1');
+  return sanitized || 'CustomType';
+}
+
+function serializeValue(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? 'undefined' : serialized;
+}
+
 function mapDataTypeToTs(
   type: string,
   customTypes?: import('../types').CustomTypeDefinition[],
 ): string {
   const custom = customTypes?.find((ct) => ct.id === type || ct.name === type);
-  if (custom) return custom.name;
+  if (custom) return sanitizeTypeName(custom.name);
 
   switch (type) {
     case 'number':
@@ -1040,104 +1057,5 @@ function mapDataTypeToTs(
       return 'AsyncIterable<any>';
     default:
       return 'any';
-  }
-}
-
-function getPureFunctionInlineCode(typeId: string, inputsVar: string): string {
-  switch (typeId) {
-    case 'math/add':
-      return `{ result: (${inputsVar}.a ?? 0) + (${inputsVar}.b ?? 0) }`;
-    case 'math/subtract':
-      return `{ result: (${inputsVar}.a ?? 0) - (${inputsVar}.b ?? 0) }`;
-    case 'math/multiply':
-      return `{ result: (${inputsVar}.a ?? 0) * (${inputsVar}.b ?? 0) }`;
-    case 'math/divide':
-      return `{ result: (${inputsVar}.b !== 0 ? (${inputsVar}.a ?? 0) / ${inputsVar}.b : 0) }`;
-    case 'math/modulo':
-      return `{ result: (${inputsVar}.a ?? 0) % (${inputsVar}.b || 1) }`;
-    case 'math/power':
-      return `{ result: Math.pow(${inputsVar}.base ?? 0, ${inputsVar}.exponent ?? 1) }`;
-    case 'math/round':
-      return `{ result: Math.round(${inputsVar}.value ?? 0) }`;
-    case 'math/abs':
-      return `{ result: Math.abs(${inputsVar}.value ?? 0) }`;
-    case 'math/sqrt':
-      return `{ result: Math.sqrt(${inputsVar}.value ?? 0) }`;
-
-    case 'string/concat':
-      return `{ result: String(${inputsVar}.a ?? '') + String(${inputsVar}.b ?? '') }`;
-    case 'string/template':
-      return `{ result: String(${inputsVar}.template ?? '').replace(/\\{a\\}/g, String(${inputsVar}.a ?? '')).replace(/\\{b\\}/g, String(${inputsVar}.b ?? '')) }`;
-    case 'string/uppercase':
-      return `{ result: String(${inputsVar}.text ?? '').toUpperCase() }`;
-    case 'string/lowercase':
-      return `{ result: String(${inputsVar}.text ?? '').toLowerCase() }`;
-    case 'string/split':
-      return `{ result: String(${inputsVar}.text ?? '').split(String(${inputsVar}.separator ?? ',')) }`;
-    case 'string/length':
-      return `{ result: String(${inputsVar}.text ?? '').length }`;
-
-    case 'logic/and':
-      return `{ result: Boolean(${inputsVar}.a && ${inputsVar}.b) }`;
-    case 'logic/or':
-      return `{ result: Boolean(${inputsVar}.a || ${inputsVar}.b) }`;
-    case 'logic/not':
-      return `{ result: !Boolean(${inputsVar}.value) }`;
-    case 'logic/compare':
-      return `{ result: Boolean(${inputsVar}.a > ${inputsVar}.b) }`;
-    case 'logic/branch':
-      return `{ result: ${inputsVar}.condition ? ${inputsVar}.ifTrue : ${inputsVar}.ifFalse }`;
-
-    case 'array/create':
-      return `{ result: [${inputsVar}.item1, ${inputsVar}.item2].filter(x => x !== undefined) }`;
-    case 'array/length':
-      return `{ result: Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.length : 0 }`;
-    case 'array/join':
-      return `{ result: Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.join(String(${inputsVar}.separator ?? ',')) : '' }`;
-    case 'array/map':
-      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.map(x => typeof x === 'number' ? x * (${inputsVar}.factor ?? 2) : x) : []) }`;
-    case 'array/filter':
-      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.filter(x => typeof x === 'number' && x > (${inputsVar}.threshold ?? 0)) : []) }`;
-    case 'array/slice':
-      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.slice(${inputsVar}.start ?? 0, ${inputsVar}.end) : []) }`;
-    case 'array/reverse':
-      return `{ result: (Array.isArray(${inputsVar}.arr) ? [...${inputsVar}.arr].reverse() : []) }`;
-    case 'array/sum':
-      return `{ result: (Array.isArray(${inputsVar}.arr) ? ${inputsVar}.arr.reduce((acc, c) => acc + (typeof c === 'number' ? c : 0), 0) : 0) }`;
-
-    case 'object/create':
-      return `{ result: { [String(${inputsVar}.key ?? 'key')]: ${inputsVar}.value } }`;
-    case 'object/get':
-      return `{ result: ${inputsVar}.obj ? ${inputsVar}.obj[${inputsVar}.key] : undefined }`;
-
-    // Async / Promise nodes
-    case 'async/delay':
-      return `await (new Promise(r => setTimeout(r, Math.max(0, ${inputsVar}.delayMs ?? 600))).then(() => ({ result: ${inputsVar}.value, promise: Promise.resolve(${inputsVar}.value) })))`;
-    case 'async/resolve':
-      return `{ promise: Promise.resolve(${inputsVar}.value) }`;
-    case 'async/await':
-      return `{ result: (${inputsVar}.promise && typeof ${inputsVar}.promise.then === 'function') ? await ${inputsVar}.promise : ${inputsVar}.promise }`;
-    case 'async/all':
-      return `{ results: await Promise.all([${inputsVar}.p1, ${inputsVar}.p2]) }`;
-    case 'async/fetch':
-      return `await (new Promise(r => setTimeout(r, ${inputsVar}.latency ?? 500)).then(() => ({ status: 200, data: { endpoint: ${inputsVar}.endpoint, timestamp: new Date().toLocaleTimeString() }, promise: Promise.resolve({ ok: true }) })))`;
-
-    // Stream / AsyncIterator nodes
-    case 'stream/interval':
-      return `{ stream: createIntervalStream(${inputsVar}.intervalMs ?? 400, ${inputsVar}.limit ?? 8) }`;
-    case 'stream/from_array':
-      return `{ stream: createArrayStream(${inputsVar}.items || [], ${inputsVar}.delayMs ?? 300) }`;
-    case 'stream/map':
-      return `{ stream: mapStream(${inputsVar}.stream, val => typeof val === 'number' ? val * (${inputsVar}.multiplier ?? 2) : val) }`;
-    case 'stream/filter':
-    case 'stream/filter_even':
-      return `{ stream: filterStream(${inputsVar}.stream, val => typeof val === 'number' && val % 2 === 0) }`;
-    case 'stream/take':
-      return `{ stream: takeStream(${inputsVar}.stream, ${inputsVar}.count ?? 4) }`;
-    case 'stream/collect':
-      return `await (async () => { const arr: any[] = []; for await (const item of (${inputsVar}.stream || [])) { arr.push(item); if (arr.length >= 50) break; } return { array: arr, count: arr.length }; })()`;
-
-    default:
-      return `{ result: ${inputsVar} }`;
   }
 }

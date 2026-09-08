@@ -131,9 +131,12 @@ type BuiltinDataType =
 - カスタム型を `interface` として出力
 - 自作ノードの式をインライン化
 - Promise／Stream を含む場合は非同期関数とヘルパーを生成
+- 複合ノードを内部グラフへ再帰的に展開
 - 出力ノードを戻り値オブジェクトへ変換
 
-生成器はノードの `evaluate` 実装そのものを解析せず、`typeId` ごとのテンプレートを利用します。そのためランタイムと生成コードの差異が生じ得ます。生成物はレビューとテストが必要です。
+各ノード定義は `evaluate` と対になる `codegen` メタデータを持ちます。組み込みノードのメタデータは `src/nodes/codegen.ts` に集約し、定義の登録時に欠落を検出します。生成器は暗黙の既定処理を持たず、未対応ノード、循環、不正な複合境界を `CodeGenerationError` として生成前に拒否します。
+
+ランタイムと生成コードの一致は、全組み込みノードに対するデータ駆動テストに加え、Promise、Stream、複合ノード、生成TypeScriptの型検査で確認します。
 
 ## 状態管理と永続化
 
@@ -152,6 +155,7 @@ type BuiltinDataType =
 | `src/engine/streamEngine.ts`    | Promise／AsyncIterator ヘルパー              |
 | `src/nodes/definitions.ts`      | 同期組み込みノードとプリセット               |
 | `src/nodes/asyncStreamNodes.ts` | 非同期・ストリームノード                     |
-| `src/nodes/customTypeNodes.ts`  | カスタム型由来ノードの生成                   |
+| `src/nodes/customTypeNodes.ts`  | カスタム型由来ノードとコード生成定義         |
+| `src/nodes/codegen.ts`          | 組み込みノードのコード生成メタデータ         |
 | `src/components/Canvas.tsx`     | キャンバス操作、接続検証、ワイヤー描画       |
 | `src/components/NodeView.tsx`   | ノードフォーム、ポート、状態・結果表示       |

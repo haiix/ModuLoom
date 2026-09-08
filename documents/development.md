@@ -82,7 +82,7 @@ npm run preview
 5. 未接続入力に妥当な既定値がある
 6. 例外メッセージが利用者に理解できる
 7. NodeView に専用フォームが必要なら状態編集UIも追加する
-8. TypeScript生成を対応させるなら `getPureFunctionInlineCode` に同じ `typeId` を追加する
+8. `evaluate` と同じ挙動の `codegen` メタデータを追加する
 9. ノードリファレンスを更新する
 
 非同期ノードは `isAsync: true` を付け、`evaluate` から Promise を返します。ストリームには `AsyncIterable` を返し、既存の `streamEngine` ヘルパーを優先して利用してください。
@@ -114,9 +114,9 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 
 ## TypeScript 生成を変更する
 
-生成処理は `src/engine/dagEngine.ts` 後半にあります。ランタイムの `evaluate` 関数から自動生成しているわけではないため、新しい組み込みノードを追加しただけでは生成コードは対応しません。
+生成処理は `src/engine/dagEngine.ts` 後半、組み込みノードの生成メタデータは `src/nodes/codegen.ts` にあります。ランタイムの `evaluate` 関数から自動生成しているわけではないため、新しい組み込みノードには同じ `typeId` の生成メタデータが必要です。欠落した定義は登録時またはコード生成前にエラーになります。
 
-最低限、入力の既定値、ノード状態、エラー時の挙動、Promise の解決、Stream の終了条件、出力ポート名をランタイムと比較してください。
+最低限、入力の既定値、ノード状態、エラー時の挙動、Promise の解決、Stream の終了条件、出力ポート名をランタイムと比較してください。`tests/codegenParity.test.ts` の全組み込みノード一覧と比較ケースも同時に更新し、生成されたTypeScriptの型検査を通してください。
 
 ## プロジェクト形式を変更する
 
