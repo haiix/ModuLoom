@@ -37,7 +37,6 @@ interface NodeViewProps {
   isSelected: boolean;
   isSteppingActive: boolean;
   customTypes?: CustomTypeDefinition[];
-  onSelect: () => void;
   onDelete: () => void;
   onReevaluate?: () => void;
   onUnpackComposite?: () => void;
@@ -77,7 +76,6 @@ export const NodeView: React.FC<NodeViewProps> = ({
   isSelected,
   isSteppingActive,
   customTypes = [],
-  onSelect,
   onDelete,
   onReevaluate,
   onUnpackComposite,
@@ -120,10 +118,6 @@ export const NodeView: React.FC<NodeViewProps> = ({
 
   return (
     <div
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
       className={`relative min-w-[220px] max-w-[320px] rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border shadow-md transition-shadow select-none ${
         isSelected
           ? 'ring-2 ring-indigo-500 shadow-xl border-indigo-400 dark:border-indigo-600'

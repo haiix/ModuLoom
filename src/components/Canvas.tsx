@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { isTypeCompatible } from '../engine/typeSystem';
 import { wouldCreateCycle } from '../engine/dagEngine';
+import type { Alignment, Distribution } from '../engine/graphEditing';
 import { NodeView } from './NodeView';
 import { Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
 
@@ -20,7 +21,9 @@ interface CanvasProps {
   evaluation: GraphEvaluation;
   stepActiveNodeId?: string | null;
   customTypes?: CustomTypeDefinition[];
-  onUpdateNodePosition: (id: string, x: number, y: number) => void;
+  selectedNodeIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
+  onUpdateNodePositions: (positions: Map<string, { x: number; y: number }>) => void;
   onFinishNodeDrag?: () => void;
   onUpdateNodeState: (id: string, newState: any) => void;
   onUpdateNodeLabel: (id: string, newLabel: string) => void;
@@ -28,6 +31,11 @@ interface CanvasProps {
   onReevaluateNode?: (id: string) => void;
   onAddConnection: (conn: Connection) => void;
   onDeleteConnection: (connId: string) => void;
+  onCopySelection: () => void;
+  onDuplicateSelection: () => void;
+  onDeleteSelection: () => void;
+  onAlignSelection: (alignment: Alignment) => void;
+  onDistributeSelection: (distribution: Distribution) => void;
   zoom: number;
   pan: { x: number; y: number };
   onUpdateZoomPan: (zoom: number, pan: { x: number; y: number }) => void;
@@ -52,7 +60,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   evaluation,
   stepActiveNodeId,
   customTypes = [],
-  onUpdateNodePosition,
+  selectedNodeIds,
+  onSelectionChange,
+  onUpdateNodePositions,
   onFinishNodeDrag,
   onUpdateNodeState,
   onUpdateNodeLabel,
@@ -60,6 +70,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   onReevaluateNode,
   onAddConnection,
   onDeleteConnection,
+  onCopySelection,
+  onDuplicateSelection,
+  onDeleteSelection,
+  onAlignSelection,
+  onDistributeSelection,
   zoom,
   pan,
   onUpdateZoomPan,
@@ -67,16 +82,20 @@ export const Canvas: React.FC<CanvasProps> = ({
   onUnpackComposite,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
 
   // Dragging node state
   const [draggingNode, setDraggingNode] = useState<{
-    id: string;
     startX: number;
     startY: number;
-    origX: number;
-    origY: number;
+    originalPositions: Map<string, { x: number; y: number }>;
+  } | null>(null);
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    additive: boolean;
   } | null>(null);
 
   // Panning state
@@ -179,13 +198,17 @@ export const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
-    setSelectedNodeId(null);
     setSelectedConnectionId(null);
 
-    // Pan canvas with Left Click or Middle Click on empty space
-    if (e.button === 0 || e.button === 1) {
+    if (e.button === 1) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    } else if (e.button === 0 && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - pan.x) / zoom;
+      const y = (e.clientY - rect.top - pan.y) / zoom;
+      if (!e.shiftKey) onSelectionChange(new Set());
+      setSelectionBox({ startX: x, startY: y, currentX: x, currentY: y, additive: e.shiftKey });
     }
   };
 
@@ -194,21 +217,33 @@ export const Canvas: React.FC<CanvasProps> = ({
     const target = e.target as HTMLElement;
     // If click originated on an input box, textarea, select, or button, do not start dragging the node
     if (target.closest('input, textarea, select, button, [contenteditable="true"]')) {
-      setSelectedNodeId(node.id);
+      if (!selectedNodeIds.has(node.id)) onSelectionChange(new Set([node.id]));
       setSelectedConnectionId(null);
       return;
     }
 
     e.stopPropagation();
-    setSelectedNodeId(node.id);
     setSelectedConnectionId(null);
 
+    const nextSelection = new Set(selectedNodeIds);
+    if (e.shiftKey) {
+      if (nextSelection.has(node.id)) nextSelection.delete(node.id);
+      else nextSelection.add(node.id);
+    } else if (!nextSelection.has(node.id)) {
+      nextSelection.clear();
+      nextSelection.add(node.id);
+    }
+    onSelectionChange(nextSelection);
+    if (!nextSelection.has(node.id)) return;
+
     setDraggingNode({
-      id: node.id,
       startX: e.clientX,
       startY: e.clientY,
-      origX: node.x,
-      origY: node.y,
+      originalPositions: new Map(
+        nodes
+          .filter((candidate) => nextSelection.has(candidate.id))
+          .map((candidate) => [candidate.id, { x: candidate.x, y: candidate.y }]),
+      ),
     });
   };
 
@@ -319,10 +354,22 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (draggingNode) {
       const dx = (e.clientX - draggingNode.startX) / zoom;
       const dy = (e.clientY - draggingNode.startY) / zoom;
-      const newX = Math.round(draggingNode.origX + dx);
-      const newY = Math.round(draggingNode.origY + dy);
-      onUpdateNodePosition(draggingNode.id, newX, newY);
+      const positions = new Map<string, { x: number; y: number }>();
+      for (const [id, original] of draggingNode.originalPositions) {
+        positions.set(id, { x: Math.round(original.x + dx), y: Math.round(original.y + dy) });
+      }
+      onUpdateNodePositions(positions);
       updatePortPositions();
+      return;
+    }
+
+    if (selectionBox && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setSelectionBox({
+        ...selectionBox,
+        currentX: (e.clientX - rect.left - pan.x) / zoom,
+        currentY: (e.clientY - rect.top - pan.y) / zoom,
+      });
       return;
     }
 
@@ -388,6 +435,49 @@ export const Canvas: React.FC<CanvasProps> = ({
     setIsPanning(false);
     if (draggingNode) onFinishNodeDrag?.();
     setDraggingNode(null);
+    if (selectionBox) {
+      const left = Math.min(selectionBox.startX, selectionBox.currentX);
+      const right = Math.max(selectionBox.startX, selectionBox.currentX);
+      const top = Math.min(selectionBox.startY, selectionBox.currentY);
+      const bottom = Math.max(selectionBox.startY, selectionBox.currentY);
+      const selected = selectionBox.additive ? new Set(selectedNodeIds) : new Set<string>();
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      const nodeBounds = new Map<
+        string,
+        { left: number; right: number; top: number; bottom: number }
+      >();
+      if (containerRect && containerRef.current) {
+        for (const element of containerRef.current.querySelectorAll<HTMLElement>(
+          '[data-node-id]',
+        )) {
+          const rect = element.getBoundingClientRect();
+          nodeBounds.set(element.dataset.nodeId!, {
+            left: (rect.left - containerRect.left - pan.x) / zoom,
+            right: (rect.right - containerRect.left - pan.x) / zoom,
+            top: (rect.top - containerRect.top - pan.y) / zoom,
+            bottom: (rect.bottom - containerRect.top - pan.y) / zoom,
+          });
+        }
+      }
+      for (const node of nodes) {
+        const bounds = nodeBounds.get(node.id) ?? {
+          left: node.x,
+          right: node.x + 240,
+          top: node.y,
+          bottom: node.y + 160,
+        };
+        if (
+          bounds.left <= right &&
+          bounds.right >= left &&
+          bounds.top <= bottom &&
+          bounds.bottom >= top
+        ) {
+          selected.add(node.id);
+        }
+      }
+      onSelectionChange(selected);
+      setSelectionBox(null);
+    }
     if (draggingWire) {
       setDraggingWire(null);
       setWireHoverHint(null);
@@ -442,6 +532,67 @@ export const Canvas: React.FC<CanvasProps> = ({
         backgroundPosition: `${pan.x}px ${pan.y}px`,
       }}
     >
+      {selectedNodeIds.size > 0 && (
+        <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 text-[11px] shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+          <span className="px-1.5 font-semibold text-indigo-600 dark:text-indigo-400">
+            {selectedNodeIds.size}件選択
+          </span>
+          <button
+            onClick={onCopySelection}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            コピー
+          </button>
+          <button
+            onClick={onDuplicateSelection}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            複製
+          </button>
+          <button
+            onClick={() => onAlignSelection('left')}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            左揃え
+          </button>
+          <button
+            onClick={() => onAlignSelection('right')}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            右揃え
+          </button>
+          <button
+            onClick={() => onAlignSelection('top')}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            上揃え
+          </button>
+          <button
+            onClick={() => onAlignSelection('bottom')}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            下揃え
+          </button>
+          <button
+            onClick={() => onDistributeSelection('horizontal')}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            水平等間隔
+          </button>
+          <button
+            onClick={() => onDistributeSelection('vertical')}
+            className="rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            垂直等間隔
+          </button>
+          <button
+            onClick={onDeleteSelection}
+            className="rounded px-2 py-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+          >
+            削除
+          </button>
+        </div>
+      )}
       {/* Transformed Stage */}
       <div
         className="absolute top-0 left-0 w-full h-full origin-top-left pointer-events-none"
@@ -576,12 +727,24 @@ export const Canvas: React.FC<CanvasProps> = ({
           )}
         </svg>
 
+        {selectionBox && (
+          <div
+            className="pointer-events-none absolute border border-indigo-500 bg-indigo-500/10"
+            style={{
+              left: Math.min(selectionBox.startX, selectionBox.currentX),
+              top: Math.min(selectionBox.startY, selectionBox.currentY),
+              width: Math.abs(selectionBox.currentX - selectionBox.startX),
+              height: Math.abs(selectionBox.currentY - selectionBox.startY),
+            }}
+          />
+        )}
+
         {/* Nodes Layer */}
         {nodes.map((node) => {
           const def = definitions.get(node.typeId);
           if (!def) return null;
 
-          const isSelected = selectedNodeId === node.id;
+          const isSelected = selectedNodeIds.has(node.id);
           const isSteppingActive = stepActiveNodeId === node.id;
           const nodeEvaluation = evaluation[node.id];
 
@@ -589,6 +752,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             <div
               key={node.id}
               className="absolute pointer-events-auto"
+              data-node-id={node.id}
               style={{
                 transform: `translate(${node.x}px, ${node.y}px)`,
               }}
@@ -601,7 +765,6 @@ export const Canvas: React.FC<CanvasProps> = ({
                 customTypes={customTypes}
                 isSelected={isSelected}
                 isSteppingActive={isSteppingActive}
-                onSelect={() => setSelectedNodeId(node.id)}
                 onDelete={() => onDeleteNode(node.id)}
                 onReevaluate={() => onReevaluateNode?.(node.id)}
                 onUnpackComposite={() => onUnpackComposite?.(node.id)}

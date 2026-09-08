@@ -95,6 +95,8 @@ npm run preview
 
 編集操作は `EditorDocument` を `commitEditorDocument` へ渡して履歴化します。複数のstate setterで1つの操作を分割せず、ノードと接続を同時に変える削除・置換は1つのドキュメント更新にまとめてください。マウス移動のような連続更新にはグループ化キーを使い、操作終了時に `finishEditorHistoryGroup` を呼びます。パンとズームなど保存対象外の表示状態は編集履歴へ含めません。
 
+複数ノード操作は `src/engine/graphEditing.ts` に置き、Canvasの座標処理やReact stateから分離します。コピーでは接続の両端が選択済みかを検査し、外部接続をクリップボードへ含めないでください。貼り付けではノードIDと接続IDを再採番し、接続端点も新しいノードIDへ写像します。
+
 ## カスタム型を拡張する
 
 カスタム型由来ノードは `generateNodesForCustomType` が生成します。型検証の現行仕様は必須フィールドの存在確認だけです。型ごとの厳密な実行時検証を追加する場合は、配列、Promise、Stream、`null` の扱いを `typeSystem.detectValueType` と整合させてください。
