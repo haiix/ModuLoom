@@ -119,16 +119,7 @@ export interface FlowProjectExport {
   };
 }
 
-export interface PortCoordinate {
-  nodeId: string;
-  portId: string;
-  isOutput: boolean;
-  type: DataType;
-  x: number;
-  y: number;
-}
-
-export interface TypeStyle {
+interface TypeStyle {
   label: string;
   color: string; // Tailwind hex color
   bgColor: string;
@@ -137,7 +128,7 @@ export interface TypeStyle {
   pillBg: string;
 }
 
-export const BASE_TYPE_CONFIG: Record<BuiltinDataType, TypeStyle> = {
+const BASE_TYPE_CONFIG: Record<BuiltinDataType, TypeStyle> = {
   number: {
     label: 'number',
     color: '#f59e0b', // amber-500
@@ -230,23 +221,3 @@ export function getTypeStyle(type: DataType, customTypes?: CustomTypeDefinition[
     pillBg: 'bg-pink-100 text-pink-800 dark:bg-pink-950/60 dark:text-pink-300',
   };
 }
-
-/**
- * Bullet-proof Proxy fallback: accessing TYPE_CONFIG[anyType] will never return undefined.
- */
-export const TYPE_CONFIG: Record<string, TypeStyle> = new Proxy(BASE_TYPE_CONFIG as any, {
-  get(target, prop: string) {
-    if (prop in target) {
-      return target[prop];
-    }
-    // Return graceful fallback for any custom type
-    return {
-      label: String(prop),
-      color: '#ec4899',
-      bgColor: 'rgba(236, 72, 153, 0.15)',
-      borderColor: '#ec4899',
-      textColor: 'text-pink-600 dark:text-pink-400',
-      pillBg: 'bg-pink-100 text-pink-800 dark:bg-pink-950/60 dark:text-pink-300',
-    };
-  },
-});

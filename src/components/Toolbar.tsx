@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PRESETS } from '../nodes/definitions';
-import { TYPE_CONFIG, DataType, CustomTypeDefinition } from '../types';
+import { DataType, CustomTypeDefinition, getTypeStyle } from '../types';
 import {
   Play,
   ZoomIn,
@@ -267,7 +267,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     <div className="flex items-center gap-2">
                       <span
                         className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: TYPE_CONFIG[t].color }}
+                        style={{ backgroundColor: getTypeStyle(t, customTypes).color }}
                       />
                       <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
                         {t}
