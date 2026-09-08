@@ -32,6 +32,7 @@
 | `math/modulo`   | `a`, `b`: number | `result: number` | `a % b`                     |
 | `math/round`    | `value: number`  | `result: number` | `Math.round` で整数化       |
 | `math/abs`      | `value: number`  | `result: number` | 絶対値                      |
+| `math/sqrt`     | `value: number`  | `result: number` | 平方根。負数は `NaN`        |
 
 ## String
 
@@ -153,4 +154,4 @@ Validate はフィールド値の JavaScript 型までは照合しません。�
 | `composite-vector-length`       | 2Dベクトル長を複合ノード化する素材                       |
 | `composite-partial-application` | 固定値10を閉じ込める部分適用の素材                       |
 
-`composite-vector-length` は現状、組み込み定義に存在しない `math/sqrt` を参照します。このノードは表示・評価されないため、プリセットは完成状態では動作しません。詳細は [既知の制約](known-limitations.md) を参照してください。
+`composite-vector-length` はテスト値3と4を入力し、`math/sqrt` を使って長さ5を計算します。

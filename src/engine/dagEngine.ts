@@ -740,10 +740,18 @@ export function generateTypeScriptCode(
   } else {
     for (const inp of inputNodes) {
       const def = definitions.get(inp.typeId);
-      const varName = sanitizeVarName(inp.customLabel || def?.label || inp.id);
-      const outType = def?.outputs[0]?.type || 'any';
+      const isCompositeInput = inp.typeId === 'composite/input-port';
+      const varName = sanitizeVarName(
+        String(isCompositeInput ? inp.state?.portName : inp.customLabel || def?.label || inp.id),
+      );
+      const outType = String(
+        isCompositeInput ? inp.state?.portType : def?.outputs[0]?.type || 'any',
+      );
       const tsType = mapDataTypeToTs(outType, customTypes);
-      ts += `  ${varName}?: ${tsType}; // Default: ${JSON.stringify(inp.state?.value ?? inp.state)}\n`;
+      const defaultValue = isCompositeInput
+        ? inp.state?.testValue
+        : (inp.state?.value ?? inp.state);
+      ts += `  ${varName}?: ${tsType}; // Default: ${JSON.stringify(defaultValue)}\n`;
     }
   }
   ts += `}\n\n`;
@@ -757,13 +765,20 @@ export function generateTypeScriptCode(
     const def = definitions.get(node.typeId);
     if (!def) continue;
 
-    const nodeVar = sanitizeVarName(`node_${node.id.slice(0, 6)}_${def.label}`);
+    const nodeVar = sanitizeVarName(`node_${node.id}_${def.label}`);
 
     if (def.kind === 'input') {
-      const varName = sanitizeVarName(node.customLabel || def.label || node.id);
-      const defaultVal = JSON.stringify(node.state?.value ?? node.state ?? def.defaultState?.value);
+      const isCompositeInput = node.typeId === 'composite/input-port';
+      const varName = sanitizeVarName(
+        String(isCompositeInput ? node.state?.portName : node.customLabel || def.label || node.id),
+      );
+      const defaultValue = isCompositeInput
+        ? (node.state?.testValue ?? def.defaultState?.testValue)
+        : (node.state?.value ?? node.state ?? def.defaultState?.value);
+      const defaultVal = JSON.stringify(defaultValue);
+      const outputPortId = def.outputs[0]?.id || 'value';
       ts += `  // Input: ${def.label}\n`;
-      ts += `  const ${nodeVar} = { value: inputs.${varName} !== undefined ? inputs.${varName} : ${defaultVal} };\n\n`;
+      ts += `  const ${nodeVar} = { ${outputPortId}: inputs.${varName} !== undefined ? inputs.${varName} : ${defaultVal} };\n\n`;
     } else if (def.kind === 'output') {
       const port = def.inputs[0];
       const conn = incoming.get(`${nodeId}:${port?.id}`);
@@ -771,9 +786,7 @@ export function generateTypeScriptCode(
       if (conn) {
         const sourceNode = nodeMap.get(conn.fromNodeId);
         const sourceDef = definitions.get(sourceNode?.typeId || '');
-        const sourceVar = sanitizeVarName(
-          `node_${conn.fromNodeId.slice(0, 6)}_${sourceDef?.label}`,
-        );
+        const sourceVar = sanitizeVarName(`node_${conn.fromNodeId}_${sourceDef?.label}`);
         sourceExpr = `${sourceVar}.${conn.fromPortId}`;
       }
       ts += `  // Output: ${def.label}\n`;
@@ -787,9 +800,7 @@ export function generateTypeScriptCode(
         if (conn) {
           const sourceNode = nodeMap.get(conn.fromNodeId);
           const sourceDef = definitions.get(sourceNode?.typeId || '');
-          const sourceVar = sanitizeVarName(
-            `node_${conn.fromNodeId.slice(0, 6)}_${sourceDef?.label}`,
-          );
+          const sourceVar = sanitizeVarName(`node_${conn.fromNodeId}_${sourceDef?.label}`);
           ts += `    ${p.id}: ${sourceVar}.${conn.fromPortId},\n`;
         } else {
           ts += `    ${p.id}: ${JSON.stringify(p.defaultValue)},\n`;
@@ -821,7 +832,7 @@ export function generateTypeScriptCode(
   ts += `  return {\n`;
   for (const out of outputNodes) {
     const def = definitions.get(out.typeId);
-    const nodeVar = sanitizeVarName(`node_${out.id.slice(0, 6)}_${def?.label}`);
+    const nodeVar = sanitizeVarName(`node_${out.id}_${def?.label}`);
     const key = sanitizeVarName(out.customLabel || def?.label || out.id);
     ts += `    ${key}: ${nodeVar}.value,\n`;
   }
@@ -886,6 +897,8 @@ function getPureFunctionInlineCode(typeId: string, inputsVar: string): string {
       return `{ result: Math.round(${inputsVar}.value ?? 0) }`;
     case 'math/abs':
       return `{ result: Math.abs(${inputsVar}.value ?? 0) }`;
+    case 'math/sqrt':
+      return `{ result: Math.sqrt(${inputsVar}.value ?? 0) }`;
 
     case 'string/concat':
       return `{ result: String(${inputsVar}.a ?? '') + String(${inputsVar}.b ?? '') }`;
