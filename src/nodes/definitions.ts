@@ -1,5 +1,6 @@
 import { NodeDefinition, GraphPreset } from '../types';
 import { ASYNC_STREAM_NODES } from './asyncStreamNodes';
+import { BUILTIN_NODE_CODEGEN } from './codegen';
 
 export const BUILTIN_NODES: NodeDefinition[] = [
   ...ASYNC_STREAM_NODES,
@@ -725,6 +726,12 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     },
   },
 ];
+
+for (const definition of BUILTIN_NODES) {
+  const codegen = BUILTIN_NODE_CODEGEN[definition.typeId];
+  if (!codegen) throw new Error(`Missing code generation metadata for ${definition.typeId}`);
+  definition.codegen = codegen;
+}
 
 // Presets that showcase pure function visual programming
 export const PRESETS: GraphPreset[] = [

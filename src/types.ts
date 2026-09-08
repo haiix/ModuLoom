@@ -67,9 +67,19 @@ export interface NodeDefinition {
   ) => Promise<Record<string, any>> | Record<string, any>;
   defaultState?: any;
   customCode?: string; // For user-defined custom pure functions
+  codegen?: NodeCodegenMetadata;
   isAsync?: boolean;
   isComposite?: boolean; // True for composite node groups
   compositeSubgraph?: CompositeSubgraph; // Internal subgraph definition
+}
+
+export interface NodeCodegenContext {
+  inputsVar: string;
+  state: any;
+}
+
+export interface NodeCodegenMetadata {
+  emit: (context: NodeCodegenContext) => string;
 }
 
 export interface NodeInstance {

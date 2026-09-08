@@ -54,6 +54,10 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
       }
       return { instance: obj };
     },
+    codegen: {
+      emit: ({ inputsVar }) =>
+        `(() => { const result: Record<string, any> = {}; for (const field of ${JSON.stringify(fields)}) { const value = ${inputsVar}[field.name] !== undefined ? ${inputsVar}[field.name] : field.defaultValue; result[field.name] = value !== null && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : value; } return { instance: result }; })()`,
+    },
   };
 
   // 2. Deconstructor Node: takes custom object -> outputs each field
@@ -84,6 +88,10 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
           val !== null && typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
       }
       return res;
+    },
+    codegen: {
+      emit: ({ inputsVar }) =>
+        `(() => { const source = ${inputsVar}.instance || {}; const result: Record<string, any> = {}; for (const field of ${JSON.stringify(fields)}) { const value = source[field.name]; result[field.name] = value !== null && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : value; } return result; })()`,
     },
   };
 
@@ -121,6 +129,10 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
         isValid,
         instance: isValid ? JSON.parse(JSON.stringify(data)) : null,
       };
+    },
+    codegen: {
+      emit: ({ inputsVar }) =>
+        `(() => { const data = ${inputsVar}.data; if (!data || typeof data !== 'object') return { isValid: false, instance: null }; const isValid = ${JSON.stringify(fields)}.every(field => !field.required || (data[field.name] !== undefined && data[field.name] !== null)); return { isValid, instance: isValid ? JSON.parse(JSON.stringify(data)) : null }; })()`,
     },
   };
 

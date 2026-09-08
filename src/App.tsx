@@ -834,8 +834,18 @@ export default function App() {
   };
 
   // Generate TypeScript Code
-  const generatedTsCode = useMemo(() => {
-    return generateTypeScriptCode(nodes, connections, definitionsMap, customTypes);
+  const generatedTypeScript = useMemo(() => {
+    try {
+      return {
+        code: generateTypeScriptCode(nodes, connections, definitionsMap, customTypes),
+        error: undefined,
+      };
+    } catch (error) {
+      return {
+        code: '',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }, [nodes, connections, definitionsMap, customTypes]);
 
   return (
@@ -956,7 +966,8 @@ export default function App() {
       <CodeExportModal
         isOpen={isCodeExportModalOpen}
         onClose={() => setIsCodeExportModalOpen(false)}
-        code={generatedTsCode}
+        code={generatedTypeScript.code}
+        error={generatedTypeScript.error}
       />
 
       {/* Composite Node Creator Modal */}
