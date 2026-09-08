@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, type SetStateAction } from 'react';
 import {
   NodeDefinition,
   NodeInstance,
@@ -28,13 +28,63 @@ import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
 import { CURRENT_PROJECT_VERSION } from './engine/projectFormat';
+import {
+  commitEditorDocument,
+  createEditorHistory,
+  finishEditorHistoryGroup,
+  isEditorDocumentDirty,
+  markEditorDocumentSaved,
+  redoEditorHistory,
+  undoEditorHistory,
+  type EditorDocument,
+} from './engine/editorHistory';
 
 export default function App() {
   // Empty graph as initial state (no sample nodes by default)
-  const [nodes, setNodes] = useState<NodeInstance[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [customDefinitions, setCustomDefinitions] = useState<NodeDefinition[]>([]);
-  const [customTypes, setCustomTypes] = useState<CustomTypeDefinition[]>(INITIAL_CUSTOM_TYPES);
+  const [editorHistory, setEditorHistory] = useState(() =>
+    createEditorHistory({
+      nodes: [],
+      connections: [],
+      customDefinitions: [],
+      customTypes: INITIAL_CUSTOM_TYPES,
+    }),
+  );
+  const { nodes, connections, customDefinitions, customTypes } = editorHistory.present;
+  const isDirty = isEditorDocumentDirty(editorHistory);
+
+  const updateEditorDocument = useCallback(
+    (update: (document: EditorDocument) => EditorDocument, groupKey?: string) => {
+      setEditorHistory((history) =>
+        commitEditorDocument(history, update(history.present), groupKey),
+      );
+    },
+    [],
+  );
+  const updateField = useCallback(
+    <K extends keyof EditorDocument>(key: K, action: SetStateAction<EditorDocument[K]>) => {
+      updateEditorDocument((document) => ({
+        ...document,
+        [key]: typeof action === 'function' ? action(document[key]) : action,
+      }));
+    },
+    [updateEditorDocument],
+  );
+  const setNodes = useCallback(
+    (action: SetStateAction<NodeInstance[]>) => updateField('nodes', action),
+    [updateField],
+  );
+  const setConnections = useCallback(
+    (action: SetStateAction<Connection[]>) => updateField('connections', action),
+    [updateField],
+  );
+  const setCustomDefinitions = useCallback(
+    (action: SetStateAction<NodeDefinition[]>) => updateField('customDefinitions', action),
+    [updateField],
+  );
+  const setCustomTypes = useCallback(
+    (action: SetStateAction<CustomTypeDefinition[]>) => updateField('customTypes', action),
+    [updateField],
+  );
 
   // Canvas viewport
   const [zoom, setZoom] = useState<number>(1.0);
@@ -231,8 +281,18 @@ export default function App() {
 
   // Handlers for Canvas & Graph Manipulation
   const handleUpdateNodePosition = (id: string, x: number, y: number) => {
-    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
+    updateEditorDocument(
+      (document) => ({
+        ...document,
+        nodes: document.nodes.map((node) => (node.id === id ? { ...node, x, y } : node)),
+      }),
+      `drag:${id}`,
+    );
   };
+
+  const handleFinishNodeDrag = useCallback(() => {
+    setEditorHistory(finishEditorHistoryGroup);
+  }, []);
 
   const handleUpdateNodeState = (id: string, newState: any) => {
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, state: newState } : n)));
@@ -243,9 +303,13 @@ export default function App() {
   };
 
   const handleDeleteNode = (id: string) => {
-    setNodes((prev) => prev.filter((n) => n.id !== id));
-    // Clean up associated connections
-    setConnections((prev) => prev.filter((c) => c.fromNodeId !== id && c.toNodeId !== id));
+    updateEditorDocument((document) => ({
+      ...document,
+      nodes: document.nodes.filter((node) => node.id !== id),
+      connections: document.connections.filter(
+        (connection) => connection.fromNodeId !== id && connection.toNodeId !== id,
+      ),
+    }));
     if (stepIndex !== null) setStepIndex(null);
   };
 
@@ -307,7 +371,13 @@ export default function App() {
   );
 
   const handleAddConnection = (newConn: Connection) => {
-    setConnections((prev) => [...prev, newConn]);
+    setConnections((prev) => [
+      ...prev.filter(
+        (connection) =>
+          connection.toNodeId !== newConn.toNodeId || connection.toPortId !== newConn.toPortId,
+      ),
+      newConn,
+    ]);
   };
 
   const handleDeleteConnection = (connId: string) => {
@@ -340,8 +410,11 @@ export default function App() {
     const preset = PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
-    setNodes(preset.nodes);
-    setConnections(preset.connections);
+    updateEditorDocument((document) => ({
+      ...document,
+      nodes: preset.nodes,
+      connections: preset.connections,
+    }));
     setZoom(1.0);
     setPan({ x: 60, y: 80 });
     setStepIndex(null);
@@ -350,8 +423,7 @@ export default function App() {
 
   const handleClearGraph = () => {
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
-    setNodes([]);
-    setConnections([]);
+    updateEditorDocument((document) => ({ ...document, nodes: [], connections: [] }));
     setStepIndex(null);
     setIsPlayingStep(false);
     setEvaluation({});
@@ -477,8 +549,11 @@ export default function App() {
         },
       ];
 
-      setNodes((prev) => [...prev, ...sampleNodes]);
-      setConnections((prev) => [...prev, ...sampleConnections]);
+      updateEditorDocument((document) => ({
+        ...document,
+        nodes: [...document.nodes, ...sampleNodes],
+        connections: [...document.connections, ...sampleConnections],
+      }));
       return;
     }
 
@@ -597,8 +672,11 @@ export default function App() {
       },
     ];
 
-    setNodes((prev) => [...prev, ...sampleNodes]);
-    setConnections((prev) => [...prev, ...sampleConnections]);
+    updateEditorDocument((document) => ({
+      ...document,
+      nodes: [...document.nodes, ...sampleNodes],
+      connections: [...document.connections, ...sampleConnections],
+    }));
   };
 
   const handleSaveComposite = (
@@ -606,18 +684,14 @@ export default function App() {
     replaceCanvas: boolean,
     targetNodeIds: string[],
   ) => {
-    // 1. Save definition in customDefinitions
-    setCustomDefinitions((prev) => {
-      const idx = prev.findIndex((d) => d.typeId === compositeDef.typeId);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = compositeDef;
-        return next;
-      }
-      return [...prev, compositeDef];
-    });
-
     if (!replaceCanvas || targetNodeIds.length === 0) {
+      setCustomDefinitions((previous) =>
+        previous.some((definition) => definition.typeId === compositeDef.typeId)
+          ? previous.map((definition) =>
+              definition.typeId === compositeDef.typeId ? compositeDef : definition,
+            )
+          : [...previous, compositeDef],
+      );
       return;
     }
 
@@ -700,8 +774,18 @@ export default function App() {
       }
     }
 
-    setNodes((prev) => [...prev.filter((n) => !targetSet.has(n.id)), newCompositeNode]);
-    setConnections(externalConnections);
+    updateEditorDocument((document) => ({
+      ...document,
+      customDefinitions: document.customDefinitions.some(
+        (definition) => definition.typeId === compositeDef.typeId,
+      )
+        ? document.customDefinitions.map((definition) =>
+            definition.typeId === compositeDef.typeId ? compositeDef : definition,
+          )
+        : [...document.customDefinitions, compositeDef],
+      nodes: [...document.nodes.filter((node) => !targetSet.has(node.id)), newCompositeNode],
+      connections: externalConnections,
+    }));
   };
 
   const handleUnpackComposite = (nodeId: string) => {
@@ -716,8 +800,11 @@ export default function App() {
     ) {
       return;
     }
-    setNodes(unpacked.nodes);
-    setConnections(unpacked.connections);
+    updateEditorDocument((document) => ({
+      ...document,
+      nodes: unpacked.nodes,
+      connections: unpacked.connections,
+    }));
   };
 
   // Export JSON project file (Local Download)
@@ -744,19 +831,24 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    setEditorHistory(markEditorDocumentSaved);
   }, [connections, customDefinitions, customTypes, nodes, pan, zoom]);
 
   // Load JSON project from local file
   const handleLoadProject = (project: FlowProjectExport) => {
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
-    setNodes(project.nodes || []);
-    setConnections(project.connections || []);
-    if (project.customTypes && Array.isArray(project.customTypes)) {
-      setCustomTypes(project.customTypes);
-    }
-    if (project.customDefinitions && Array.isArray(project.customDefinitions)) {
-      setCustomDefinitions(project.customDefinitions);
-    }
+    setEditorHistory((history) =>
+      markEditorDocumentSaved(
+        commitEditorDocument(history, {
+          nodes: project.nodes || [],
+          connections: project.connections || [],
+          customTypes: Array.isArray(project.customTypes) ? project.customTypes : [],
+          customDefinitions: Array.isArray(project.customDefinitions)
+            ? project.customDefinitions
+            : [],
+        }),
+      ),
+    );
     if (project.viewport) {
       setZoom(project.viewport.zoom ?? 1.0);
       setPan(project.viewport.pan ?? { x: 60, y: 80 });
@@ -765,20 +857,55 @@ export default function App() {
     setIsPlayingStep(false);
   };
 
-  // Keyboard Shortcuts: Ctrl/Cmd + S to Export, Ctrl/Cmd + O to Load
+  const handleUndo = useCallback(() => {
+    setEditorHistory(undoEditorHistory);
+    setStepIndex(null);
+    setIsPlayingStep(false);
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    setEditorHistory(redoEditorHistory);
+    setStepIndex(null);
+    setIsPlayingStep(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // Project and history shortcuts. Form controls retain their native undo/redo behavior.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      const isEditing = Boolean(
+        target?.closest('input, textarea, select, [contenteditable="true"]'),
+      );
+      const key = e.key.toLowerCase();
+      if (!isEditing && key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if (!isEditing && key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      } else if (key === 's') {
         e.preventDefault();
         handleExportJson();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+      } else if (key === 'o') {
         e.preventDefault();
         setIsLoadModalOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleExportJson]);
+  }, [handleExportJson, handleRedo, handleUndo]);
 
   // Zoom helpers
   const handleZoomIn = () => setZoom((z) => Math.min(z * 1.15, 2.2));
@@ -859,6 +986,11 @@ export default function App() {
         onOpenCreateCompositeModal={() => setIsCreateCompositeOpen(true)}
         onExportJson={handleExportJson}
         onOpenLoadModal={() => setIsLoadModalOpen(true)}
+        canUndo={editorHistory.past.length > 0}
+        canRedo={editorHistory.future.length > 0}
+        isDirty={isDirty}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         customTypes={customTypes}
         onOpenCodeExportModal={() => setIsCodeExportModalOpen(true)}
         isLiveReactive={isLiveReactive}
@@ -885,6 +1017,7 @@ export default function App() {
           stepActiveNodeId={stepActiveNodeId}
           customTypes={customTypes}
           onUpdateNodePosition={handleUpdateNodePosition}
+          onFinishNodeDrag={handleFinishNodeDrag}
           onUpdateNodeState={handleUpdateNodeState}
           onUpdateNodeLabel={handleUpdateNodeLabel}
           onDeleteNode={handleDeleteNode}
