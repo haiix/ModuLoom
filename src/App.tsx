@@ -16,6 +16,7 @@ import {
   generateTypeScriptCode,
   detectDirtySeedNodeIds,
   getDownstreamNodeIds,
+  unpackCompositeNode,
 } from './engine/dagEngine';
 import { Canvas } from './components/Canvas';
 import { Toolbar } from './components/Toolbar';
@@ -662,9 +663,14 @@ export default function App() {
         // External node feeding into target
         const targetNode = nodes.find((n) => n.id === c.toNodeId);
         if (targetNode?.typeId === 'composite/input-port') {
-          const portName = targetNode.state?.portName || 'input';
+          const portName =
+            compositeDef.compositeSubgraph?.inputPortMappings?.find(
+              ({ internalNodeId }) => internalNodeId === targetNode.id,
+            )?.externalPortId ??
+            targetNode.state?.portName ??
+            'input';
           externalConnections.push({
-            id: `c_${c.fromNodeId}_${newCompositeNodeId}_${portName}`,
+            id: `c_${newCompositeNodeId}_${c.id}`,
             fromNodeId: c.fromNodeId,
             fromPortId: c.fromPortId,
             toNodeId: newCompositeNodeId,
@@ -675,9 +681,14 @@ export default function App() {
         // Target node feeding to external node
         const targetNode = nodes.find((n) => n.id === c.fromNodeId);
         if (targetNode?.typeId === 'composite/output-port') {
-          const portName = targetNode.state?.portName || 'result';
+          const portName =
+            compositeDef.compositeSubgraph?.outputPortMappings?.find(
+              ({ internalNodeId }) => internalNodeId === targetNode.id,
+            )?.externalPortId ??
+            targetNode.state?.portName ??
+            'result';
           externalConnections.push({
-            id: `c_${newCompositeNodeId}_${portName}_${c.toNodeId}`,
+            id: `c_${newCompositeNodeId}_${c.id}`,
             fromNodeId: newCompositeNodeId,
             fromPortId: portName,
             toNodeId: c.toNodeId,
@@ -694,48 +705,19 @@ export default function App() {
   };
 
   const handleUnpackComposite = (nodeId: string) => {
-    const compNode = nodes.find((n) => n.id === nodeId);
-    if (!compNode) return;
-
-    const def = definitionsMap.get(compNode.typeId);
+    const def = definitionsMap.get(nodes.find((node) => node.id === nodeId)?.typeId || '');
     if (!def || !def.isComposite || !def.compositeSubgraph) return;
-
-    const subgraph = def.compositeSubgraph;
-
-    let minX = Infinity,
-      minY = Infinity;
-    for (const n of subgraph.nodes) {
-      if (n.x < minX) minX = n.x;
-      if (n.y < minY) minY = n.y;
+    const unpacked = unpackCompositeNode(nodes, connections, nodeId, def);
+    if (
+      unpacked.warnings.length > 0 &&
+      !window.confirm(
+        `一部の接続を復元できません。復元できる範囲で展開しますか？\n\n${unpacked.warnings.join('\n')}`,
+      )
+    ) {
+      return;
     }
-
-    const idMap = new Map<string, string>();
-    const unpackedNodes: NodeInstance[] = subgraph.nodes.map((n) => {
-      const newId = `n_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      idMap.set(n.id, newId);
-      return {
-        ...JSON.parse(JSON.stringify(n)),
-        id: newId,
-        x: compNode.x + (n.x - minX),
-        y: compNode.y + (n.y - minY),
-      };
-    });
-
-    const unpackedConnections: Connection[] = subgraph.connections
-      .filter((c) => idMap.has(c.fromNodeId) && idMap.has(c.toNodeId))
-      .map((c) => ({
-        id: `c_${idMap.get(c.fromNodeId)}_${idMap.get(c.toNodeId)}_${c.toPortId}`,
-        fromNodeId: idMap.get(c.fromNodeId)!,
-        fromPortId: c.fromPortId,
-        toNodeId: idMap.get(c.toNodeId)!,
-        toPortId: c.toPortId,
-      }));
-
-    setNodes((prev) => [...prev.filter((n) => n.id !== nodeId), ...unpackedNodes]);
-    setConnections((prev) => [
-      ...prev.filter((c) => c.fromNodeId !== nodeId && c.toNodeId !== nodeId),
-      ...unpackedConnections,
-    ]);
+    setNodes(unpacked.nodes);
+    setConnections(unpacked.connections);
   };
 
   // Export JSON project file (Local Download)

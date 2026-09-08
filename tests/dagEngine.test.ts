@@ -7,6 +7,7 @@ import {
   generateTypeScriptCode,
   getDownstreamNodeIds,
   getTopologicalOrder,
+  unpackCompositeNode,
   wouldCreateCycle,
 } from '../src/engine/dagEngine';
 import { BUILTIN_NODES, PRESETS } from '../src/nodes/definitions';
@@ -203,5 +204,188 @@ describe('generateTypeScriptCode', () => {
     const evaluatePipeline = compileGeneratedPipeline(code);
 
     expect(Object.values(evaluatePipeline())).toEqual([NaN]);
+  });
+});
+
+describe('unpackCompositeNode', () => {
+  const compositeDefinition: NodeDefinition = {
+    typeId: 'composite/sum-product',
+    label: 'Sum and Product',
+    category: 'Composite',
+    kind: 'pure',
+    inputs: [
+      { id: 'a', name: 'a', type: 'number' },
+      { id: 'b', name: 'b', type: 'number' },
+    ],
+    outputs: [
+      { id: 'sum', name: 'sum', type: 'number' },
+      { id: 'product', name: 'product', type: 'number' },
+    ],
+    isComposite: true,
+    compositeSubgraph: {
+      nodes: [
+        {
+          id: 'in-a',
+          typeId: 'composite/input-port',
+          x: 0,
+          y: 0,
+          state: { portName: 'value', portType: 'number', testValue: 0 },
+        },
+        {
+          id: 'in-b',
+          typeId: 'composite/input-port',
+          x: 0,
+          y: 160,
+          state: { portName: 'value', portType: 'number', testValue: 0 },
+        },
+        { id: 'add', typeId: 'math/add', x: 220, y: 0 },
+        { id: 'multiply', typeId: 'math/multiply', x: 220, y: 180 },
+        {
+          id: 'out-sum',
+          typeId: 'composite/output-port',
+          x: 440,
+          y: 0,
+          state: { portName: 'value', portType: 'number' },
+        },
+        {
+          id: 'out-product',
+          typeId: 'composite/output-port',
+          x: 440,
+          y: 180,
+          state: { portName: 'value', portType: 'number' },
+        },
+      ],
+      connections: [
+        { id: 'a-add', fromNodeId: 'in-a', fromPortId: 'out', toNodeId: 'add', toPortId: 'a' },
+        { id: 'b-add', fromNodeId: 'in-b', fromPortId: 'out', toNodeId: 'add', toPortId: 'b' },
+        {
+          id: 'a-multiply',
+          fromNodeId: 'in-a',
+          fromPortId: 'out',
+          toNodeId: 'multiply',
+          toPortId: 'a',
+        },
+        {
+          id: 'b-multiply',
+          fromNodeId: 'in-b',
+          fromPortId: 'out',
+          toNodeId: 'multiply',
+          toPortId: 'b',
+        },
+        {
+          id: 'add-sum',
+          fromNodeId: 'add',
+          fromPortId: 'result',
+          toNodeId: 'out-sum',
+          toPortId: 'in',
+        },
+        {
+          id: 'multiply-product',
+          fromNodeId: 'multiply',
+          fromPortId: 'result',
+          toNodeId: 'out-product',
+          toPortId: 'in',
+        },
+      ],
+      inputNodeIds: ['in-a', 'in-b'],
+      outputNodeIds: ['out-sum', 'out-product'],
+      inputPortMappings: [
+        { externalPortId: 'a', internalNodeId: 'in-a' },
+        { externalPortId: 'b', internalNodeId: 'in-b' },
+      ],
+      outputPortMappings: [
+        { externalPortId: 'sum', internalNodeId: 'out-sum' },
+        { externalPortId: 'product', internalNodeId: 'out-product' },
+      ],
+    },
+    evaluate: () => ({}),
+  };
+
+  const outerNodes: NodeInstance[] = [
+    { id: 'input-a', typeId: 'input/number', x: 0, y: 0, state: { value: 3 } },
+    { id: 'input-b', typeId: 'input/number', x: 0, y: 160, state: { value: 4 } },
+    { id: 'composite', typeId: compositeDefinition.typeId, x: 250, y: 80 },
+    { id: 'sum-output', typeId: 'output/inspector', x: 550, y: 0 },
+    { id: 'product-output', typeId: 'output/inspector', x: 550, y: 180 },
+  ];
+  const outerConnections: Connection[] = [
+    {
+      id: 'input-a-comp',
+      fromNodeId: 'input-a',
+      fromPortId: 'value',
+      toNodeId: 'composite',
+      toPortId: 'a',
+    },
+    {
+      id: 'input-b-comp',
+      fromNodeId: 'input-b',
+      fromPortId: 'value',
+      toNodeId: 'composite',
+      toPortId: 'b',
+    },
+    {
+      id: 'comp-sum',
+      fromNodeId: 'composite',
+      fromPortId: 'sum',
+      toNodeId: 'sum-output',
+      toPortId: 'value',
+    },
+    {
+      id: 'comp-product',
+      fromNodeId: 'composite',
+      fromPortId: 'product',
+      toNodeId: 'product-output',
+      toPortId: 'value',
+    },
+  ];
+
+  it('複数の外部入出力を再接続して評価結果を維持する', () => {
+    const beforeDefinitions = new Map(
+      [...BUILTIN_NODES, compositeDefinition].map((definition) => [definition.typeId, definition]),
+    );
+    const before = evaluateGraph(outerNodes, outerConnections, beforeDefinitions);
+    const unpacked = unpackCompositeNode(
+      outerNodes,
+      outerConnections,
+      'composite',
+      compositeDefinition,
+    );
+    const afterDefinitions = new Map(
+      BUILTIN_NODES.map((definition) => [definition.typeId, definition]),
+    );
+    const after = evaluateGraph(unpacked.nodes, unpacked.connections, afterDefinitions);
+
+    expect(before['sum-output'].outputs.displayedValue).toBe(7);
+    expect(before['product-output'].outputs.displayedValue).toBe(12);
+    expect(after['sum-output'].outputs.displayedValue).toBe(7);
+    expect(after['product-output'].outputs.displayedValue).toBe(12);
+    expect(unpacked.warnings).toEqual([]);
+    expect(unpacked.nodes.some(({ id }) => id === 'composite')).toBe(false);
+    expect(new Set(unpacked.nodes.map(({ id }) => id)).size).toBe(unpacked.nodes.length);
+    expect(new Set(unpacked.connections.map(({ id }) => id)).size).toBe(
+      unpacked.connections.length,
+    );
+  });
+
+  it('対応する内部端子がない外部接続を警告する', () => {
+    const brokenConnection: Connection = {
+      id: 'broken-input',
+      fromNodeId: 'input-a',
+      fromPortId: 'value',
+      toNodeId: 'composite',
+      toPortId: 'missing',
+    };
+
+    const unpacked = unpackCompositeNode(
+      outerNodes,
+      [...outerConnections, brokenConnection],
+      'composite',
+      compositeDefinition,
+    );
+
+    expect(unpacked.warnings).toEqual([
+      "接続 'broken-input': 入力ポート 'missing' の内部端子が見つかりません。",
+    ]);
+    expect(unpacked.connections.some(({ id }) => id === 'broken-input')).toBe(false);
   });
 });

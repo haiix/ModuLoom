@@ -692,11 +692,11 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     kind: 'input',
     description:
       '複合ノード（関数グループ）の入力引数端子。ポート名や型を設定して下流ノードへ値を供給します。',
-    inputs: [],
+    inputs: [{ id: 'in', name: 'in', type: 'any' }],
     outputs: [{ id: 'out', name: 'out', type: 'any', defaultValue: 0 }],
     defaultState: { portName: 'x', portType: 'number', testValue: 10 },
-    evaluate: (_inputs, state) => {
-      let val = state?.testValue;
+    evaluate: (inputs, state) => {
+      let val = inputs.in !== undefined ? inputs.in : state?.testValue;
       if (val === undefined) {
         if (state?.portType === 'number') val = 0;
         else if (state?.portType === 'string') val = '';

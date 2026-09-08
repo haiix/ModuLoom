@@ -32,6 +32,13 @@ export interface CompositeSubgraph {
   connections: Connection[];
   inputNodeIds: string[]; // IDs of composite/input-port nodes
   outputNodeIds: string[]; // IDs of composite/output-port nodes
+  inputPortMappings?: CompositePortMapping[];
+  outputPortMappings?: CompositePortMapping[];
+}
+
+export interface CompositePortMapping {
+  externalPortId: string;
+  internalNodeId: string;
 }
 
 export interface NodeDefinition {
