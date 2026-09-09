@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CustomCodeExecutionError,
+  disposeCustomCodeWorker,
   executeCustomCode,
   validateCustomCode,
 } from '../src/engine/customCodeRunner';
@@ -9,7 +10,8 @@ import type { NodeDefinition } from '../src/types';
 
 class FakeWorker {
   onmessage:
-    ((event: MessageEvent<{ ok: boolean; value?: unknown; error?: string }>) => void) | null = null;
+    | ((event: MessageEvent<{ id: number; ok: boolean; value?: unknown; error?: string }>) => void)
+    | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
   terminated = false;
 
@@ -25,13 +27,19 @@ class FakeWorker {
 }
 
 describe('custom code runner', () => {
+  afterEach(() => {
+    disposeCustomCodeWorker();
+    vi.unstubAllGlobals();
+  });
+
   it('allows expressions and Promise results', async () => {
     validateCustomCode('Promise.resolve(inputs.value * 2)');
-    const worker = new FakeWorker((target) =>
+    const worker = new FakeWorker((target, value) => {
+      const { id } = value as { id: number };
       queueMicrotask(() =>
-        target.onmessage?.({ data: { ok: true, value: { answer: 4 } } } as MessageEvent),
-      ),
-    );
+        target.onmessage?.({ data: { id, ok: true, value: { answer: 4 } } } as MessageEvent),
+      );
+    });
     await expect(
       executeCustomCode(
         'Promise.resolve(inputs.value * 2)',
@@ -80,8 +88,7 @@ describe('custom code runner', () => {
     expect(worker.terminated).toBe(true);
   });
 
-  it('revokes the worker URL when worker creation fails', async () => {
-    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
+  it('reports module worker creation failures', async () => {
     await expect(
       executeCustomCode(
         'inputs.value',
@@ -93,18 +100,17 @@ describe('custom code runner', () => {
         },
       ),
     ).rejects.toThrowError(/Workerを開始できませんでした: unavailable/);
-    expect(revokeSpy).toHaveBeenCalledOnce();
-    revokeSpy.mockRestore();
   });
 
   it('rejects a result-size error reported by the worker', async () => {
-    const worker = new FakeWorker((target) =>
+    const worker = new FakeWorker((target, value) => {
+      const { id } = value as { id: number };
       queueMicrotask(() =>
         target.onmessage?.({
-          data: { ok: false, error: '返却データが上限 10 bytes を超えました。' },
+          data: { id, ok: false, error: '返却データが上限 10 bytes を超えました。' },
         } as MessageEvent),
-      ),
-    );
+      );
+    });
     await expect(
       executeCustomCode(
         'inputs.value',
@@ -115,6 +121,37 @@ describe('custom code runner', () => {
         },
       ),
     ).rejects.toThrowError(/返却データが上限 10 bytes を超えました/);
+  });
+
+  it('reuses one module worker and serializes concurrent evaluations', async () => {
+    const workers: FakeWorker[] = [];
+    const messages: Array<{ id: number; code: string }> = [];
+    vi.stubGlobal(
+      'Worker',
+      class extends FakeWorker {
+        constructor() {
+          super((_target, value) => messages.push(value as { id: number; code: string }));
+          workers.push(this);
+        }
+      },
+    );
+
+    const first = executeCustomCode('inputs.value', { value: 1 });
+    const second = executeCustomCode('inputs.value', { value: 2 });
+    expect(workers).toHaveLength(1);
+    expect(messages).toHaveLength(1);
+
+    workers[0].onmessage?.({
+      data: { id: messages[0].id, ok: true, value: 1 },
+    } as MessageEvent);
+    await expect(first).resolves.toBe(1);
+    await vi.waitFor(() => expect(messages).toHaveLength(2));
+
+    workers[0].onmessage?.({
+      data: { id: messages[1].id, ok: true, value: 2 },
+    } as MessageEvent);
+    await expect(second).resolves.toBe(2);
+    expect(workers).toHaveLength(1);
   });
 
   it('surfaces isolated execution errors on the target node', async () => {
