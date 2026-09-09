@@ -42,6 +42,7 @@ interface CanvasProps {
   onOpenLibrary?: () => void;
   onLoadStarterPreset?: () => void;
   onUnpackComposite?: (nodeId: string) => void;
+  isLibraryOpen?: boolean;
 }
 
 interface DraggingWire {
@@ -82,6 +83,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onOpenLibrary,
   onLoadStarterPreset,
   onUnpackComposite,
+  isLibraryOpen = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
@@ -192,21 +194,25 @@ export const Canvas: React.FC<CanvasProps> = ({
     onUpdateZoomPan(newZoom, { x: newPanX, y: newPanY });
   };
 
-  // Canvas Mouse Down: Start Pan or Deselect
+  // Canvas Mouse Down: Start panning with the left button or selection with the right button.
   const handleMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     // If clicking on node or handle or input controls, do not pan or deselect
-    if (target.closest('.node-drag-handle, input, textarea, select, button')) {
+    if (
+      target.closest(
+        '.node-drag-handle, input, textarea, select, button, [data-canvas-interactive]',
+      )
+    ) {
       return;
     }
 
     setSelectedConnectionId(null);
 
-    if (e.button === 2) {
-      e.preventDefault();
+    if (e.button === 0) {
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    } else if (e.button === 0 && containerRef.current) {
+    } else if (e.button === 2 && containerRef.current) {
+      e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left - pan.x) / zoom;
       const y = (e.clientY - rect.top - pan.y) / zoom;
@@ -538,7 +544,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       }}
     >
       {selectedNodeIds.size > 0 && (
-        <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 text-[11px] shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+        <div
+          role="toolbar"
+          aria-label="選択ノード操作"
+          className="absolute right-3 top-3 z-20 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 text-[11px] shadow-lg backdrop-blur transition-[left] dark:border-slate-700 dark:bg-slate-900/95"
+          style={{ left: isLibraryOpen ? '21.5rem' : '4.5rem' }}
+        >
           <span className="px-1.5 font-semibold text-indigo-600 dark:text-indigo-400">
             {selectedNodeIds.size}件選択
           </span>
@@ -643,7 +654,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             const midY = (startPos.y + endPos.y) / 2;
 
             return (
-              <g key={conn.id} className="group/wire pointer-events-auto">
+              <g key={conn.id} data-canvas-interactive className="group/wire pointer-events-auto">
                 {/* Thick invisible click hit-area */}
                 <path
                   d={path}

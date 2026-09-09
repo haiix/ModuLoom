@@ -52,7 +52,32 @@ test('ノードライブラリを開いてもはじめてガイドと重なら�
   expect(rectanglesOverlap(guideBox!, libraryBox!)).toBe(false);
 });
 
-test('キャンバスは右ドラッグで移動し、中ドラッグでは移動しない', async ({ page }) => {
+test('選択ノード操作はノードライブラリの開閉状態にかかわらず重ならない', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.locator('[data-node-id="n-slider-a"] .node-drag-handle').click();
+
+  const selectionTools = page.getByRole('toolbar', { name: '選択ノード操作' });
+  const library = page.getByRole('complementary', { name: 'ノードライブラリ' });
+  await expect(selectionTools).toBeVisible();
+
+  let toolsBox = await selectionTools.boundingBox();
+  let libraryBox = await library.boundingBox();
+  expect(toolsBox).not.toBeNull();
+  expect(libraryBox).not.toBeNull();
+  expect(rectanglesOverlap(toolsBox!, libraryBox!)).toBe(false);
+
+  await page.getByRole('button', { name: 'ノードライブラリを開く' }).click();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
+
+  toolsBox = await selectionTools.boundingBox();
+  libraryBox = await library.boundingBox();
+  expect(toolsBox).not.toBeNull();
+  expect(libraryBox).not.toBeNull();
+  expect(rectanglesOverlap(toolsBox!, libraryBox!)).toBe(false);
+});
+
+test('キャンバスは左ドラッグで移動し、中ドラッグでは移動しない', async ({ page }) => {
   const canvas = page.getByLabel('ノードキャンバス');
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
@@ -70,12 +95,28 @@ test('キャンバスは右ドラッグで移動し、中ドラッグでは移�
     .toBe(initialPosition);
 
   await page.mouse.move(start.x, start.y);
-  await page.mouse.down({ button: 'right' });
+  await page.mouse.down({ button: 'left' });
   await page.mouse.move(start.x - 40, start.y + 30);
-  await page.mouse.up({ button: 'right' });
+  await page.mouse.up({ button: 'left' });
   await expect
     .poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundPosition))
     .not.toBe(initialPosition);
+});
+
+test('キャンバスは右ドラッグでノードを範囲選択する', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+
+  const node = page.locator('[data-node-id="n-slider-a"]');
+  const nodeBox = await node.boundingBox();
+  expect(nodeBox).not.toBeNull();
+
+  await page.mouse.move(nodeBox!.x - 8, nodeBox!.y - 8);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(nodeBox!.x + nodeBox!.width + 8, nodeBox!.y + nodeBox!.height + 8);
+  await page.mouse.up({ button: 'right' });
+
+  await expect(page.getByRole('toolbar', { name: '選択ノード操作' })).toContainText('1件選択');
 });
 
 test('四則演算プリセットを実行して結果を表示する', async ({ page }) => {
