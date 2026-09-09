@@ -279,6 +279,7 @@ export async function evaluateCompositeNodeAsync(
   subgraph: CompositeSubgraph,
   externalInputs: Record<string, any>,
   definitions: Map<string, NodeDefinition>,
+  isCancelled?: () => boolean,
 ): Promise<Record<string, any>> {
   const internalNodes: NodeInstance[] = JSON.parse(JSON.stringify(subgraph.nodes));
   const internalConnections: Connection[] = JSON.parse(JSON.stringify(subgraph.connections));
@@ -302,7 +303,15 @@ export async function evaluateCompositeNodeAsync(
     }
   }
 
-  const internalEval = await evaluateGraphAsync(internalNodes, internalConnections, definitions);
+  const internalEval = await evaluateGraphAsync(
+    internalNodes,
+    internalConnections,
+    definitions,
+    undefined,
+    undefined,
+    undefined,
+    isCancelled,
+  );
 
   const outputs: Record<string, any> = {};
   const externalOutputPortByNodeId = new Map(
@@ -579,7 +588,7 @@ export function evaluateGraph(
       if (def.isComposite && def.compositeSubgraph) {
         outputs = evaluateCompositeNode(def.compositeSubgraph, inputs, definitions);
       } else {
-        const res = def.evaluate(inputs, node.state);
+        const res = def.isAsync ? {} : def.evaluate(inputs, node.state);
         // In synchronous evaluateGraph, unwrap if non-promise
         outputs = isPromise(res) ? {} : res;
       }
@@ -736,7 +745,12 @@ export async function evaluateGraphAsync(
           return d?.isAsync || d?.category === 'Async';
         });
         if (hasAsync) {
-          outputs = await evaluateCompositeNodeAsync(def.compositeSubgraph, inputs, definitions);
+          outputs = await evaluateCompositeNodeAsync(
+            def.compositeSubgraph,
+            inputs,
+            definitions,
+            isCancelled,
+          );
         } else {
           outputs = evaluateCompositeNode(def.compositeSubgraph, inputs, definitions);
         }
@@ -772,11 +786,22 @@ export async function evaluateGraphAsync(
           outputs = { array: [], count: 0 };
         }
       } else {
-        const evalRes = def.evaluate(inputs, node.state);
-        if (isPromise(evalRes)) {
-          outputs = await evalRes;
-        } else {
-          outputs = evalRes;
+        const abortController = new AbortController();
+        if (isCancelled?.()) abortController.abort();
+        const cancellationTimer = isCancelled
+          ? globalThis.setInterval(() => {
+              if (isCancelled()) abortController.abort();
+            }, 10)
+          : undefined;
+        try {
+          const evalRes = def.evaluate(inputs, node.state, { signal: abortController.signal });
+          if (isPromise(evalRes)) {
+            outputs = await evalRes;
+          } else {
+            outputs = evalRes;
+          }
+        } finally {
+          if (cancellationTimer !== undefined) globalThis.clearInterval(cancellationTimer);
         }
       }
 

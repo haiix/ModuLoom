@@ -100,7 +100,13 @@ type BuiltinDataType =
 - ストリームは安全上の上限として最大50件を収集する
 - React effect の後始末でキャンセルフラグを立て、古い評価のUI反映を抑制する
 
-キャンセルは協調的です。進行中の Promise や AsyncIterator 自体を `AbortController` で停止する設計ではなく、古い結果を反映しないための仕組みです。
+評価エンジンは各非同期ノードへ `AbortSignal` を渡します。React effectの破棄を検知するとSignalを中断し、自作式のWorkerは即時終了します。既存の組み込みPromiseやAsyncIteratorはSignalを利用しないため、これらは引き続き古い結果の反映を抑制する協調的キャンセルです。
+
+## 自作コードの隔離実行
+
+`customCodeRunner.ts` は自作式ごとにBlob URLからWeb Workerを生成し、入力をStructured Cloneで渡します。Worker内で式またはPromiseを評価し、結果をJSONへ正規化してからページへ返します。実行時間は1秒、UTF-8換算の返却データは1MiBが上限です。完了、エラー、タイムアウト、AbortSignal中断のいずれでもWorkerを終了しBlob URLを解放します。
+
+事前検証はDOM、通信、ストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作に関係する識別子を拒否します。WorkerにはDOMがないため、検証回避があってもページDOMやReact状態へ直接アクセスできません。ただしWorker自体はブラウザの完全な権限制限サンドボックスではないため、静的検証と読み込み時の信頼確認を多層防御として併用します。
 
 ## 差分再評価
 
@@ -167,6 +173,8 @@ type BuiltinDataType =
 | `src/engine/streamEngine.ts`         | Promise／AsyncIterator ヘルパー              |
 | `src/engine/editorHistory.ts`        | 編集履歴、Undo／Redo、未保存判定             |
 | `src/engine/graphEditing.ts`         | 複数選択のコピー、移動、削除、整列           |
+| `src/engine/customCodeRunner.ts`     | 自作式のWorker隔離、制限、キャンセル         |
+| `src/engine/projectTrust.ts`         | 読み込み時の実行コード信頼判定               |
 | `src/nodes/definitions.ts`           | 同期組み込みノードとプリセット               |
 | `src/nodes/asyncStreamNodes.ts`      | 非同期・ストリームノード                     |
 | `src/nodes/customTypeNodes.ts`       | カスタム型由来ノードとコード生成定義         |
