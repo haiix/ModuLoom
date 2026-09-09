@@ -194,7 +194,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     onUpdateZoomPan(newZoom, { x: newPanX, y: newPanY });
   };
 
-  // Canvas Mouse Down: Start panning with the left button or selection with the right button.
+  // Canvas Mouse Down: Start selection with the left button or panning with the right button.
   const handleMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     // If clicking on node or handle or input controls, do not pan or deselect
@@ -208,16 +208,17 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     setSelectedConnectionId(null);
 
-    if (e.button === 0) {
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    } else if (e.button === 2 && containerRef.current) {
+    if (e.button === 0 && containerRef.current) {
       e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left - pan.x) / zoom;
       const y = (e.clientY - rect.top - pan.y) / zoom;
       if (!e.shiftKey) onSelectionChange(new Set());
       setSelectionBox({ startX: x, startY: y, currentX: x, currentY: y, additive: e.shiftKey });
+    } else if (e.button === 2) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
   };
 
