@@ -259,6 +259,55 @@ describe('runtime / TypeScript output parity', () => {
     ).toThrow(CodeGenerationError);
   });
 
+  it('自作式のsleep APIを生成TypeScriptでも利用できる', async () => {
+    const custom: NodeDefinition = {
+      typeId: 'custom/sleep',
+      label: 'Sleep',
+      category: 'Custom',
+      kind: 'pure',
+      inputs: [],
+      outputs: [{ id: 'result', name: 'result', type: 'number' }],
+      customCode: '(async () => { await sleep(0); return 42; })()',
+      isAsync: true,
+      evaluate: async () => ({ result: 42 }),
+    };
+    const sink = builtins.get('output/inspector')!;
+    const add = builtins.get('math/add')!;
+    const code = generateTypeScriptCode(
+      [
+        { id: 'custom', typeId: custom.typeId, x: 0, y: 0 },
+        { id: 'add', typeId: add.typeId, x: 0, y: 0 },
+        { id: 'sink', typeId: sink.typeId, x: 0, y: 0 },
+      ],
+      [
+        {
+          id: 'custom-add',
+          fromNodeId: 'custom',
+          fromPortId: 'result',
+          toNodeId: 'add',
+          toPortId: 'a',
+        },
+        {
+          id: 'add-sink',
+          fromNodeId: 'add',
+          fromPortId: 'result',
+          toNodeId: 'sink',
+          toPortId: 'value',
+        },
+      ],
+      new Map([
+        [custom.typeId, custom],
+        [add.typeId, { ...add, inputs: add.inputs.map((port) => ({ ...port, defaultValue: 1 })) }],
+        [sink.typeId, sink],
+      ]),
+    );
+
+    expectTypechecks(code);
+    await expect(normalize(compilePipeline(code)())).resolves.toMatchObject({
+      'Value Inspector': 43,
+    });
+  });
+
   it('ゼロ除算はランタイムと生成コードの両方で失敗する', () => {
     const divide = builtins.get('math/divide')!;
     expect(() => divide.evaluate({ a: 1, b: 0 })).toThrow('ゼロ除算');

@@ -534,8 +534,9 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                   <code>inputs.a &gt; 0 ? inputs.a : 0</code>
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  式は隔離Worker内のQuickJS
-                  VMで実行され、1秒で停止します。DOM、通信、ストレージ、動的コード生成は使用できません。
+                  式は隔離Worker内のQuickJS VMで実行され、1秒で停止します。待機には0〜1,000msの
+                  <code>sleep(ms)</code>
+                  を使用します。DOM、通信、ストレージ、汎用タイマー、動的コード生成は使用できません。
                 </p>
 
                 {/* Test result status */}

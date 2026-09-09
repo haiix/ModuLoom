@@ -1,0 +1,3 @@
+export const CUSTOM_CODE_TIMEOUT_MS = 1_000;
+export const CUSTOM_CODE_MAX_RESULT_BYTES = 1_048_576;
+export const CUSTOM_CODE_MAX_SLEEP_MS = 1_000;

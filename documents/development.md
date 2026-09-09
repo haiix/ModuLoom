@@ -134,7 +134,7 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 
 複合ノードには対応する `evaluateCompositeNode` と `evaluateCompositeNodeAsync` もあります。
 
-自作ノードの評価は `customCodeRunner.ts` の `createCustomNodeEvaluator` を必ず利用し、UIや読み込み処理で式を直接実行しないでください。実行本体は `customCodeWorker.ts` から `customCodeVm.ts` を呼び出し、QuickJSのRuntime／Contextを評価ごとに破棄します。禁止APIの変更は `validateCustomCode`、時間・サイズ上限は `customCodeRunner.ts` の定数へ集約します。非同期評価のキャンセルは `EvaluationContext.signal` を通じて伝播するため、新しい長時間ノードも可能ならSignalを監視してください。
+自作ノードの評価は `customCodeRunner.ts` の `createCustomNodeEvaluator` を必ず利用し、UIや読み込み処理で式を直接実行しないでください。実行本体は `customCodeWorker.ts` から `customCodeVm.ts` を呼び出し、QuickJSのRuntime／Contextを評価ごとに破棄します。式構文はAcornで同期検証し、禁止APIの変更は `validateCustomCode`、時間・サイズ・`sleep` 上限は `customCodePolicy.ts` の定数へ集約します。非同期評価のキャンセルは `EvaluationContext.signal` を通じて伝播するため、新しい長時間ノードも可能ならSignalを監視してください。
 
 ## TypeScript 生成を変更する
 

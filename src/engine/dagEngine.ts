@@ -7,6 +7,7 @@ import {
   CompositeSubgraph,
 } from '../types';
 import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
+import { CUSTOM_CODE_MAX_SLEEP_MS } from './customCodePolicy';
 import { GENERATED_STREAM_HELPERS } from '../nodes/codegen';
 
 /**
@@ -925,6 +926,7 @@ export function generateTypeScriptCode(
   const hasAsyncOrStream = expanded.nodes.some((node) => {
     const definition = definitionMap.get(node.id)!;
     return (
+      Boolean(definition.customCode) ||
       definition.isAsync ||
       definition.category === 'Async' ||
       definition.category === 'Stream' ||
@@ -933,6 +935,9 @@ export function generateTypeScriptCode(
       )
     );
   });
+  const hasCustomCode = expanded.nodes.some((node) =>
+    Boolean(definitionMap.get(node.id)!.customCode),
+  );
 
   const nodeVariables = new Map(order.map((nodeId, index) => [nodeId, `node_${index}`]));
   const inputNames = new Map<string, string>();
@@ -955,6 +960,12 @@ export function generateTypeScriptCode(
 
   let ts = `/**\n * Auto-generated Pure Function Pipeline\n * Built with ModuLoom Type-Safe Node Editor\n */\n\n`;
   if (hasAsyncOrStream) ts += `${GENERATED_STREAM_HELPERS}\n`;
+  if (hasCustomCode) {
+    ts += `async function sleep(ms: number): Promise<void> {\n`;
+    ts += `  if (!Number.isFinite(ms) || ms < 0 || ms > ${CUSTOM_CODE_MAX_SLEEP_MS}) throw new Error('sleepの待機時間は0から${CUSTOM_CODE_MAX_SLEEP_MS}msで指定してください。');\n`;
+    ts += `  await new Promise(resolve => setTimeout(resolve, ms));\n`;
+    ts += `}\n\n`;
+  }
 
   if (customTypes?.length) {
     for (const customType of customTypes) {
@@ -1006,7 +1017,7 @@ export function generateTypeScriptCode(
           `カスタムノード '${definition.label}' に出力ポートがありません。`,
         );
       }
-      implementation = `{ ${JSON.stringify(outputPortId)}: ((inputs: Record<string, any>) => (${definition.customCode}))(${inputsVariable}) }`;
+      implementation = `{ ${JSON.stringify(outputPortId)}: await ((inputs: Record<string, any>) => (${definition.customCode}))(${inputsVariable}) }`;
     }
 
     if (inputNames.has(nodeId)) {
