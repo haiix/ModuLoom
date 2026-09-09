@@ -128,6 +128,18 @@ test('四則演算プリセットを実行して結果を表示する', async ({
   await expect(page.locator('[data-node-id="n-out-inspector"]')).toContainText('111');
 });
 
+test('自作式をModule Worker内のQuickJSで実行する', async ({ page }) => {
+  await page.getByRole('button', { name: 'ノードを追加', exact: true }).click();
+  await page.getByRole('button', { name: '自作ノード', exact: true }).click();
+  await page
+    .getByPlaceholder('例: inputs.a + inputs.b')
+    .fill('Promise.resolve(inputs.a * inputs.b)');
+
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+
+  await expect(page.getByText('テスト実行成功:')).toContainText('200');
+});
+
 test('プリセットの適用を元に戻してやり直せる', async ({ page }) => {
   await page.getByRole('button', { name: 'その他の操作' }).click();
   await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');

@@ -217,12 +217,16 @@ class EvaluatingWorker {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
 
-  postMessage(message: { code: string; inputs: Record<string, unknown> }) {
+  postMessage(message: { id: number; code: string; inputs: Record<string, unknown> }) {
     Promise.resolve()
       .then(() => new Function('inputs', `return (${message.code});`)(message.inputs))
-      .then((value) => this.onmessage?.({ data: { ok: true, value } } as MessageEvent))
+      .then((value) =>
+        this.onmessage?.({ data: { id: message.id, ok: true, value } } as MessageEvent),
+      )
       .catch((error) =>
-        this.onmessage?.({ data: { ok: false, error: String(error) } } as MessageEvent),
+        this.onmessage?.({
+          data: { id: message.id, ok: false, error: String(error) },
+        } as MessageEvent),
       );
   }
 

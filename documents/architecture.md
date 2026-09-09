@@ -104,9 +104,11 @@ type BuiltinDataType =
 
 ## 自作コードの隔離実行
 
-`customCodeRunner.ts` は自作式ごとにBlob URLからWeb Workerを生成し、入力をStructured Cloneで渡します。Worker内で式またはPromiseを評価し、結果をJSONへ正規化してからページへ返します。実行時間は1秒、UTF-8換算の返却データは1MiBが上限です。完了、エラー、タイムアウト、AbortSignal中断のいずれでもWorkerを終了しBlob URLを解放します。
+`customCodeRunner.ts` はViteがビルドするModule Workerを1つ再利用し、自作式を直列キューで実行します。Worker起動時にrelease-sync版QuickJS-Emscripten WASM moduleを1回初期化し、評価ごとに独立したRuntimeとContextを作成・破棄します。`inputs` はJSONからQuickJS内へ再構築し、結果もQuickJS内でJSON文字列へ正規化してからページへ返します。guestにはmodule loaderやブラウザAPIを登録しません。
 
-事前検証はDOM、通信、ストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作に関係する識別子を拒否します。WorkerにはDOMがないため、検証回避があってもページDOMやReact状態へ直接アクセスできません。ただしWorker自体はブラウザの完全な権限制限サンドボックスではないため、静的検証と読み込み時の信頼確認を多層防御として併用します。
+実行時間は1秒、UTF-8換算の返却データは1MiBが上限です。通常完了後はWorkerとWASM moduleを次の評価に再利用しますが、タイムアウト、AbortSignal中断、Worker異常では外側のWorkerを強制終了し、次のキュー項目から新しいWorkerを起動します。これにより、QuickJSが応答不能になってもUIスレッド側から停止できます。
+
+事前検証はDOM、通信、ストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作に関係する識別子を拒否します。これは製品ポリシーの補助であり、セキュリティ境界はguestとホストの間にあるQuickJS VMとJSONデータ境界です。QuickJS-Emscriptenが1.0未満で未監査であること、Runtime単位のCPU・メモリ上限が未導入であること、生成TypeScriptは隔離されないことは残存リスクです。
 
 ## 差分再評価
 
@@ -179,7 +181,9 @@ type BuiltinDataType =
 | `src/engine/streamEngine.ts`         | Promise／AsyncIterator ヘルパー              |
 | `src/engine/editorHistory.ts`        | 編集履歴、Undo／Redo、未保存判定             |
 | `src/engine/graphEditing.ts`         | 複数選択のコピー、移動、削除、整列           |
-| `src/engine/customCodeRunner.ts`     | 自作式のWorker隔離、制限、キャンセル         |
+| `src/engine/customCodeRunner.ts`     | 自作式のWorkerキュー、時間制限、キャンセル   |
+| `src/engine/customCodeWorker.ts`     | Module Worker内のQuickJS評価要求処理         |
+| `src/engine/customCodeVm.ts`         | QuickJS moduleと評価別Runtime/Context管理    |
 | `src/engine/projectTrust.ts`         | 読み込み時の実行コード信頼判定               |
 | `src/engine/executionDebugger.ts`    | 逐次実行、停止、トレース、エラー経路         |
 | `src/nodes/definitions.ts`           | 同期組み込みノードとプリセット               |

@@ -63,7 +63,9 @@ export function validateCustomCode(code: string): void {
 }
 
 interface WorkerMessage {
+  id: number;
   ok: boolean;
+  fatal?: boolean;
   value?: unknown;
   error?: string;
 }
@@ -75,12 +77,153 @@ interface WorkerLike {
   terminate(): void;
 }
 
+type WorkerFactory = (url: URL, options: WorkerOptions) => WorkerLike;
+
 interface ExecuteOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxResultBytes?: number;
-  workerFactory?: (url: string) => WorkerLike;
+  workerFactory?: WorkerFactory;
 }
+
+interface QueuedEvaluation {
+  id: number;
+  code: string;
+  inputs: Record<string, unknown>;
+  timeoutMs: number;
+  maxResultBytes: number;
+  signal?: AbortSignal;
+  resolve(value: unknown): void;
+  reject(error: CustomCodeExecutionError): void;
+  handleAbort?: () => void;
+  timeoutId?: ReturnType<typeof setTimeout>;
+}
+
+class CustomCodeWorkerQueue {
+  private worker: WorkerLike | undefined;
+  private active: QueuedEvaluation | undefined;
+  private readonly pending: QueuedEvaluation[] = [];
+  private nextId = 1;
+
+  constructor(private readonly workerFactory?: WorkerFactory) {}
+
+  execute(
+    code: string,
+    inputs: Record<string, unknown>,
+    options: Omit<ExecuteOptions, 'workerFactory'>,
+  ): Promise<unknown> {
+    if (options.signal?.aborted) {
+      return Promise.reject(new CustomCodeExecutionError('実行がキャンセルされました。'));
+    }
+    return new Promise((resolve, reject) => {
+      this.pending.push({
+        id: this.nextId++,
+        code,
+        inputs,
+        timeoutMs: options.timeoutMs ?? CUSTOM_CODE_TIMEOUT_MS,
+        maxResultBytes: options.maxResultBytes ?? CUSTOM_CODE_MAX_RESULT_BYTES,
+        signal: options.signal,
+        resolve,
+        reject,
+      });
+      this.pump();
+    });
+  }
+
+  dispose(): void {
+    this.worker?.terminate();
+    this.worker = undefined;
+  }
+
+  private createWorker(): WorkerLike {
+    const worker = this.workerFactory
+      ? this.workerFactory(new URL('./customCodeWorker.ts', import.meta.url), { type: 'module' })
+      : new Worker(new URL('./customCodeWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<WorkerMessage>) => this.handleMessage(event.data);
+    worker.onerror = (event) =>
+      this.finish(
+        new CustomCodeExecutionError(event.message || 'Workerでエラーが発生しました。'),
+        undefined,
+        true,
+      );
+    return worker;
+  }
+
+  private pump(): void {
+    if (this.active) return;
+    const evaluation = this.pending.shift();
+    if (!evaluation) return;
+    this.active = evaluation;
+    if (evaluation.signal?.aborted) {
+      this.finish(new CustomCodeExecutionError('実行がキャンセルされました。'));
+      return;
+    }
+    try {
+      this.worker ??= this.createWorker();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.finish(new CustomCodeExecutionError(`Workerを開始できませんでした: ${message}`));
+      return;
+    }
+
+    evaluation.handleAbort = () =>
+      this.finish(new CustomCodeExecutionError('実行がキャンセルされました。'), undefined, true);
+    evaluation.signal?.addEventListener('abort', evaluation.handleAbort, { once: true });
+    evaluation.timeoutId = globalThis.setTimeout(
+      () =>
+        this.finish(
+          new CustomCodeExecutionError(
+            `実行時間が${evaluation.timeoutMs}msを超えたため停止しました。`,
+          ),
+          undefined,
+          true,
+        ),
+      evaluation.timeoutMs,
+    );
+
+    try {
+      this.worker.postMessage({
+        id: evaluation.id,
+        code: evaluation.code,
+        inputs: evaluation.inputs,
+        maxResultBytes: evaluation.maxResultBytes,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.finish(
+        new CustomCodeExecutionError(`入力をWorkerへ送信できません: ${message}`),
+        undefined,
+        true,
+      );
+    }
+  }
+
+  private handleMessage(message: WorkerMessage): void {
+    if (!this.active || message.id !== this.active.id) return;
+    if (message.ok) this.finish(undefined, message.value);
+    else
+      this.finish(
+        new CustomCodeExecutionError(message.error ?? '式の実行に失敗しました。'),
+        undefined,
+        message.fatal,
+      );
+  }
+
+  private finish(error?: CustomCodeExecutionError, value?: unknown, resetWorker = false): void {
+    const evaluation = this.active;
+    if (!evaluation) return;
+    this.active = undefined;
+    if (evaluation.timeoutId !== undefined) globalThis.clearTimeout(evaluation.timeoutId);
+    if (evaluation.handleAbort)
+      evaluation.signal?.removeEventListener('abort', evaluation.handleAbort);
+    if (resetWorker) this.dispose();
+    if (error) evaluation.reject(error);
+    else evaluation.resolve(value);
+    queueMicrotask(() => this.pump());
+  }
+}
+
+const sharedWorkerQueue = new CustomCodeWorkerQueue();
 
 export function executeCustomCode(
   code: string,
@@ -88,68 +231,15 @@ export function executeCustomCode(
   options: ExecuteOptions = {},
 ): Promise<unknown> {
   validateCustomCode(code);
-  const timeoutMs = options.timeoutMs ?? CUSTOM_CODE_TIMEOUT_MS;
-  const maxResultBytes = options.maxResultBytes ?? CUSTOM_CODE_MAX_RESULT_BYTES;
-  if (options.signal?.aborted) {
-    return Promise.reject(new CustomCodeExecutionError('実行がキャンセルされました。'));
+  if (options.workerFactory) {
+    const queue = new CustomCodeWorkerQueue(options.workerFactory);
+    return queue.execute(code, inputs, options).finally(() => queue.dispose());
   }
+  return sharedWorkerQueue.execute(code, inputs, options);
+}
 
-  const workerSource = createWorkerSource();
-  const workerUrl = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
-  let worker: WorkerLike;
-  try {
-    worker = options.workerFactory
-      ? options.workerFactory(workerUrl)
-      : (new Worker(workerUrl) as WorkerLike);
-  } catch (error) {
-    URL.revokeObjectURL(workerUrl);
-    const message = error instanceof Error ? error.message : String(error);
-    return Promise.reject(new CustomCodeExecutionError(`Workerを開始できませんでした: ${message}`));
-  }
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback: () => void) => {
-      if (settled) return;
-      settled = true;
-      globalThis.clearTimeout(timeoutId);
-      options.signal?.removeEventListener('abort', handleAbort);
-      worker.terminate();
-      URL.revokeObjectURL(workerUrl);
-      callback();
-    };
-    const handleAbort = () =>
-      finish(() => reject(new CustomCodeExecutionError('実行がキャンセルされました。')));
-    const timeoutId = globalThis.setTimeout(
-      () =>
-        finish(() =>
-          reject(
-            new CustomCodeExecutionError(`実行時間が${timeoutMs}msを超えたため停止しました。`),
-          ),
-        ),
-      timeoutMs,
-    );
-    options.signal?.addEventListener('abort', handleAbort, { once: true });
-    worker.onmessage = (event) => {
-      if (event.data.ok) finish(() => resolve(event.data.value));
-      else
-        finish(() =>
-          reject(new CustomCodeExecutionError(event.data.error ?? '式の実行に失敗しました。')),
-        );
-    };
-    worker.onerror = (event) =>
-      finish(() =>
-        reject(new CustomCodeExecutionError(event.message || 'Workerでエラーが発生しました。')),
-      );
-    try {
-      worker.postMessage({ code, inputs, maxResultBytes });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      finish(() =>
-        reject(new CustomCodeExecutionError(`入力をWorkerへ送信できません: ${message}`)),
-      );
-    }
-  });
+export function disposeCustomCodeWorker(): void {
+  sharedWorkerQueue.dispose();
 }
 
 export function createCustomNodeEvaluator(
@@ -159,22 +249,4 @@ export function createCustomNodeEvaluator(
   return async (inputs, _state, context) => ({
     [outputPortId]: await executeCustomCode(code, inputs, { signal: context?.signal }),
   });
-}
-
-function createWorkerSource() {
-  return `
-self.onmessage = async (event) => {
-  const { code, inputs, maxResultBytes } = event.data;
-  try {
-    const run = new Function('inputs', '"use strict"; return (' + code + ');');
-    const value = await run(inputs);
-    const serialized = JSON.stringify(value);
-    if (serialized === undefined) throw new Error('戻り値はJSONとしてシリアライズ可能である必要があります。');
-    const size = new TextEncoder().encode(serialized).byteLength;
-    if (size > maxResultBytes) throw new Error('返却データが上限 ' + maxResultBytes + ' bytes を超えました。');
-    self.postMessage({ ok: true, value: JSON.parse(serialized) });
-  } catch (error) {
-    self.postMessage({ ok: false, error: error instanceof Error ? error.message : String(error) });
-  }
-};`;
 }
