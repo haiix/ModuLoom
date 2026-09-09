@@ -11,6 +11,7 @@ interface Props {
   onLoadStarterPreset: () => void;
   onSkip: () => void;
   onComplete: () => void;
+  isLibraryOpen?: boolean;
 }
 
 const guidance = {
@@ -45,6 +46,7 @@ export function OnboardingGuide({
   onLoadStarterPreset,
   onSkip,
   onComplete,
+  isLibraryOpen = false,
 }: Props) {
   const progress = getOnboardingProgress(nodes, connections, definitions, evaluation);
   const success = progress.stage === 'success';
@@ -53,7 +55,9 @@ export function OnboardingGuide({
   return (
     <aside
       aria-label="はじめてガイド"
-      className="pointer-events-none fixed bottom-4 left-4 z-20 w-[min(21rem,calc(100vw-2rem))] rounded-2xl border border-indigo-200 bg-white/95 p-4 shadow-xl backdrop-blur dark:border-indigo-900 dark:bg-slate-900/95"
+      className={`pointer-events-none fixed bottom-4 z-20 w-[min(21rem,calc(100vw-2rem))] rounded-2xl border border-indigo-200 bg-white/95 p-4 shadow-xl backdrop-blur transition-[left] dark:border-indigo-900 dark:bg-slate-900/95 ${
+        isLibraryOpen ? 'left-[22rem] max-md:hidden' : 'left-4'
+      }`}
     >
       <div className="flex items-start gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
