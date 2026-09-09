@@ -18,9 +18,19 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run test:e2e
 ```
 
-`lint` は ESLint、`typecheck` は `tsc --noEmit`、`test` は Vitest を実行します。コミット前には `npm run format:check` も実行してください。
+`lint` は ESLint、`typecheck` は `tsc --noEmit`、`test` は Vitest、`test:e2e` は
+Playwrightを実行します。コミット前には `npm run format:check` も実行してください。
+
+初回のE2Eテスト実行前にChromiumをインストールします。
+
+```bash
+npx playwright install chromium
+```
+
+対話的にテストを作成・調査する場合は `npm run test:e2e:ui` を使用してください。
 
 本番ビルドを確認する場合:
 
@@ -33,6 +43,7 @@ npm run preview
 ```text
 .
 ├─ public/                  静的公開ファイル
+├─ e2e/                     Playwright E2Eテスト
 ├─ tests/                   Vitest 単体テスト
 ├─ .github/workflows/       GitHub Actions CI
 ├─ src/
@@ -46,6 +57,7 @@ npm run preview
 ├─ documents/              詳細ドキュメント
 ├─ index.html              HTML エントリーポイント
 ├─ package.json            npm 設定
+├─ playwright.config.ts    Playwright 設定
 ├─ tsconfig.json           TypeScript 設定
 └─ vite.config.ts          Vite／React／Tailwind 設定
 ```
@@ -144,6 +156,20 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 npm test
 npm run test:watch
 ```
+
+### E2Eテスト方針
+
+`e2e/` のPlaywrightテストは、ReactコンポーネントとブラウザAPIをまたぐ重要な利用者フローを検証します。評価ロジックの網羅は高速なVitestへ残し、E2Eで同じ入力組み合わせを重複して検証しません。Vitestの対象は `tests/`、Playwrightの対象は `e2e/` に分離します。
+
+初期対象は次のスモークテストです。
+
+- アプリが空のキャンバスと主要操作を表示できる
+- サンプルプリセットを選択し、グラフを実行して結果を確認できる
+- グラフ編集を元に戻し、やり直せる
+
+今後は不具合リスクと回帰実績に応じて、ポート間のドラッグ接続、JSON保存・読込、カスタムノード作成を追加します。表示文言や細かな見た目だけを固定するテストは避け、利用者が認識できるrole・labelを優先します。キャンバス上の座標操作など、それだけでは安定して特定できない要素に限り `data-testid` または既存の `data-node-id` を使用してください。
+
+CIとローカルの既定ブラウザはChromiumのみです。ブラウザ固有の不具合が判明するまではFirefox・WebKitを常時実行せず、実行時間と保守コストを抑えます。CIで失敗した場合はHTMLレポートとtraceを `playwright-report` 成果物から確認できます。スクリーンショットとtraceは初回の再試行時に保存されます。
 
 今後の推奨テスト範囲:
 
