@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Boxes,
+  CircleHelp,
   ChevronDown,
   Code2,
   Download,
@@ -33,6 +34,7 @@ interface ToolbarProps {
   onManualReevaluate: () => void;
   showDagViewer: boolean;
   onToggleDagViewer: () => void;
+  onOpenOnboarding: () => void;
   nodeCount?: number;
   canUndo: boolean;
   canRedo: boolean;
@@ -57,6 +59,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onManualReevaluate,
   showDagViewer,
   onToggleDagViewer,
+  onOpenOnboarding,
   nodeCount = 0,
   canUndo,
   canRedo,
@@ -233,6 +236,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               icon={<Layers />}
               label={showDagViewer ? 'DAG実行順序を閉じる' : 'DAG実行順序を表示'}
               onClick={() => closeAndRun(onToggleDagViewer)}
+            />
+            <MenuButton
+              icon={<CircleHelp />}
+              label="はじめてガイドを表示"
+              onClick={() => closeAndRun(onOpenOnboarding)}
             />
             <details className="group rounded-lg px-2 py-1 text-xs">
               <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
