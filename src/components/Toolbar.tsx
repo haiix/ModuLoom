@@ -234,7 +234,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             />
             <MenuButton
               icon={<Layers />}
-              label={showDagViewer ? 'DAG実行順序を閉じる' : 'DAG実行順序を表示'}
+              label={showDagViewer ? 'DAG実行デバッガーを閉じる' : 'DAG実行デバッガーを表示'}
               onClick={() => closeAndRun(onToggleDagViewer)}
             />
             <MenuButton
