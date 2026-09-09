@@ -202,7 +202,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     setSelectedConnectionId(null);
 
-    if (e.button === 1) {
+    if (e.button === 2) {
+      e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     } else if (e.button === 0 && containerRef.current) {
@@ -527,7 +528,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      className="relative w-full h-full overflow-hidden bg-slate-100 dark:bg-slate-950 select-none cursor-default"
+      onContextMenu={(event) => event.preventDefault()}
+      aria-label="ノードキャンバス"
+      className={`relative h-full w-full select-none overflow-hidden bg-slate-100 dark:bg-slate-950 ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
       style={{
         backgroundImage: `radial-gradient(circle, var(--color-slate-300, #cbd5e1) 1px, transparent 1px)`,
         backgroundSize: `${24 * zoom}px ${24 * zoom}px`,

@@ -43,8 +43,9 @@ interface ToolbarProps {
   onRedo: () => void;
 }
 
-const primary =
-  'inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800';
+const primaryBase =
+  'inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
+const primary = `${primaryBase} border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800`;
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   onSelectPreset,
@@ -96,8 +97,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         moreButtonRef.current?.focus();
       }
     };
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (moreMenuRef.current?.contains(target) || moreButtonRef.current?.contains(target)) return;
+      setShowMore(false);
+    };
     window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
+    document.addEventListener('pointerdown', closeOnOutsidePointerDown);
+    return () => {
+      window.removeEventListener('keydown', close);
+      document.removeEventListener('pointerdown', closeOnOutsidePointerDown);
+    };
   }, [showMore]);
   const label = (text: string) => (presentation.showActionLabels ? <span>{text}</span> : null);
   const closeAndRun = (action: () => void) => {
@@ -143,7 +154,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           onClick={onOpenLoadModal}
         />
         <button
-          className={`${primary} border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 dark:text-white`}
+          className={`${primaryBase} border-indigo-600 bg-indigo-600 text-white hover:border-indigo-700 hover:bg-indigo-700 dark:border-indigo-500 dark:bg-indigo-600 dark:text-white dark:hover:border-indigo-400 dark:hover:bg-indigo-500`}
           onClick={onManualReevaluate}
           aria-label="グラフを実行"
           title="グラフを実行"

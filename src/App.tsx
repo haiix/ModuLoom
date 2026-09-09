@@ -1212,6 +1212,7 @@ export default function App() {
             onLoadStarterPreset={() => handleSelectPreset(STARTER_PRESET_ID)}
             onSkip={() => hideOnboarding('skipped')}
             onComplete={() => hideOnboarding('completed')}
+            isLibraryOpen={isLibraryOpen}
           />
         )}
 
