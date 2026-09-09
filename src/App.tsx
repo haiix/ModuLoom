@@ -1200,6 +1200,7 @@ export default function App() {
           }}
           onOpenLibrary={() => setIsLibraryOpen(true)}
           onLoadStarterPreset={() => handleSelectPreset(STARTER_PRESET_ID)}
+          isLibraryOpen={isLibraryOpen}
         />
 
         {showOnboarding && (

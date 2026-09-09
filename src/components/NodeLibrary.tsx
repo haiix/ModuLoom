@@ -88,6 +88,8 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
 
   return (
     <div
+      role="complementary"
+      aria-label="ノードライブラリ"
       className={`fixed top-16 left-4 z-40 flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl transition-all duration-200 overflow-hidden ${
         isOpen ? 'w-80 max-h-[calc(100vh-5rem)]' : 'w-12 h-12'
       }`}
@@ -96,6 +98,7 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
       <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50">
         <button
           onClick={onToggleOpen}
+          aria-label={isOpen ? 'ノードライブラリを閉じる' : 'ノードライブラリを開く'}
           className="flex items-center gap-2 text-slate-800 dark:text-slate-100 hover:opacity-80 transition font-medium text-xs"
         >
           <Box className="w-4 h-4 text-indigo-500" />
