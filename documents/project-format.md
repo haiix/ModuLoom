@@ -112,7 +112,7 @@ interface CustomTypeDefinition {
 
 自作ノードと複合ノードを格納します。`NodeDefinition` には本来 `evaluate` 関数がありますが、関数は JSON に保存できません。
 
-- 自作ノード: `customCode` の構文と禁止APIを検証し、Web Worker内で実行して先頭の出力ポートへ結果を返す非同期評価関数を復元する
+- 自作ノード: `customCode` の構文をAcornで、禁止APIを製品ポリシーとして同期検証し、Web Worker内で実行して先頭の出力ポートへ結果を返す非同期評価関数を復元する
 - 複合ノード: `compositeSubgraph` を評価エンジンが直接実行するため、JSON読み込み後も評価可能
 
 複合ノードの `compositeSubgraph` は内部の `nodes`、`connections`、`inputNodeIds`、`outputNodeIds` に加え、次の境界対応を保存します。
@@ -133,6 +133,8 @@ interface CompositeSubgraph {
 対応情報は複数の入出力や同名端子を一意に扱い、展開時に外部接続を Group Input／Group Output へ復元するために使います。対応情報がない旧ファイルは、外部ポートと端子ID配列の順序で復元します。
 
 保存JSONを直接編集する場合、`customCode` は実行可能な JavaScript として扱われることに注意してください。自作式を含むファイルは、解析後に表示される信頼確認へチェックしない限り適用できません。式はページ本体とは別のWeb Workerで実行され、1秒の実行時間と1MiBのJSON返却サイズに制限されます。
+
+`parseFlowProject` と `parseFlowProjectJson` は同期APIのままです。読み込み時は式を実行せず、Acornによる式構文と禁止トークンだけを同期検証します。復元されたノードの `evaluate` は非同期で、実際のQuickJS評価エラーはDAG評価または式のテスト実行時に通知されます。
 
 ## viewport
 
@@ -158,4 +160,4 @@ interface CompositeSubgraph {
 
 ## セキュリティ
 
-プロジェクトJSONには実行対象となる `customCode` が含まれ得ます。Worker隔離によりDOMとアプリ状態への直接アクセスはできませんが、Workerは完全な権限制限サンドボックスではなく、禁止構文の検出も防御の一層です。信頼できる作成元のファイルだけを読み込んでください。詳細はルートの `SECURITY.md` を参照してください。
+プロジェクトJSONには実行対象となる `customCode` が含まれ得ます。式はWorker内のQuickJS VMで実行され、DOMとアプリ状態をguestへ公開しません。構文・禁止トークン検査は早期エラーのための製品ポリシーであり、セキュリティ境界ではありません。信頼できる作成元のファイルだけを読み込んでください。詳細はルートの `SECURITY.md` を参照してください。

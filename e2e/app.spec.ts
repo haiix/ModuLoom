@@ -61,20 +61,21 @@ test('選択ノード操作はノードライブラリの開閉状態にかか�
   const library = page.getByRole('complementary', { name: 'ノードライブラリ' });
   await expect(selectionTools).toBeVisible();
 
-  let toolsBox = await selectionTools.boundingBox();
-  let libraryBox = await library.boundingBox();
-  expect(toolsBox).not.toBeNull();
-  expect(libraryBox).not.toBeNull();
-  expect(rectanglesOverlap(toolsBox!, libraryBox!)).toBe(false);
+  const expectNoOverlap = async () =>
+    expect
+      .poll(async () => {
+        const toolsBox = await selectionTools.boundingBox();
+        const libraryBox = await library.boundingBox();
+        if (!toolsBox || !libraryBox) return true;
+        return rectanglesOverlap(toolsBox, libraryBox);
+      })
+      .toBe(false);
+  await expectNoOverlap();
 
   await page.getByRole('button', { name: 'ノードライブラリを開く' }).click();
   await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
 
-  toolsBox = await selectionTools.boundingBox();
-  libraryBox = await library.boundingBox();
-  expect(toolsBox).not.toBeNull();
-  expect(libraryBox).not.toBeNull();
-  expect(rectanglesOverlap(toolsBox!, libraryBox!)).toBe(false);
+  await expectNoOverlap();
 });
 
 test('キャンバスは右ドラッグで移動し、中ドラッグでは移動しない', async ({ page }) => {
@@ -128,16 +129,46 @@ test('四則演算プリセットを実行して結果を表示する', async ({
   await expect(page.locator('[data-node-id="n-out-inspector"]')).toContainText('111');
 });
 
-test('自作式をModule Worker内のQuickJSで実行する', async ({ page }) => {
-  await page.getByRole('button', { name: 'ノードを追加', exact: true }).click();
-  await page.getByRole('button', { name: '自作ノード', exact: true }).click();
+test('自作式のPromise、sleep、拒否、期限超過をQuickJSで処理する', async ({ page }) => {
+  const openEditor = async () => {
+    if (!(await page.getByRole('button', { name: '自作ノード', exact: true }).isVisible())) {
+      await page.getByRole('button', { name: 'ノードを追加', exact: true }).click();
+    }
+    await page.getByRole('button', { name: '自作ノード', exact: true }).click();
+  };
+  const runInitialPromise = async () => {
+    await page
+      .getByPlaceholder('例: inputs.a + inputs.b')
+      .fill('Promise.resolve(inputs.a * inputs.b)');
+    await page.getByRole('button', { name: '式のテスト実行' }).click();
+    await expect(page.getByText('テスト実行成功:')).toContainText('200', { timeout: 3_000 });
+  };
+
+  await openEditor();
+  try {
+    await runInitialPromise();
+  } catch (error) {
+    if (await page.getByPlaceholder('例: inputs.a + inputs.b').isVisible()) throw error;
+    // A reused Vite dev server can reload once when it first optimizes Worker-only dependencies.
+    await openEditor();
+    await runInitialPromise();
+  }
+
   await page
     .getByPlaceholder('例: inputs.a + inputs.b')
-    .fill('Promise.resolve(inputs.a * inputs.b)');
-
+    .fill('(async () => { await sleep(5); return inputs.a + inputs.b; })()');
   await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText('テスト実行成功:')).toContainText('30');
 
-  await expect(page.getByText('テスト実行成功:')).toContainText('200');
+  await page
+    .getByPlaceholder('例: inputs.a + inputs.b')
+    .fill('Promise.reject(new Error("rejected"))');
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText(/実行時エラー:/)).toContainText('rejected');
+
+  await page.getByPlaceholder('例: inputs.a + inputs.b').fill('new Promise(() => {})');
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText(/実行時エラー:/)).toContainText('実行時間が1000msを超えたため停止');
 });
 
 test('プリセットの適用を元に戻してやり直せる', async ({ page }) => {

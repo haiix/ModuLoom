@@ -57,6 +57,20 @@ describe('custom code runner', () => {
     (code) => expect(() => validateCustomCode(code)).toThrowError(/禁止されたAPIまたは構文/),
   );
 
+  it('validates expression syntax without host dynamic code generation', () => {
+    const hostFunction = vi.fn(() => {
+      throw new Error('host Function must not be called');
+    });
+    vi.stubGlobal('Function', hostFunction);
+
+    expect(() => validateCustomCode('inputs.value + 1')).not.toThrow();
+    expect(hostFunction).not.toHaveBeenCalled();
+    expect(() => validateCustomCode('inputs.')).toThrowError(/式の構文エラー/);
+    expect(() => validateCustomCode('setTimeout(() => 1, 0)')).toThrowError(
+      /禁止されたAPIまたは構文 'setTimeout'/,
+    );
+  });
+
   it('terminates an unresponsive worker at the time limit', async () => {
     const worker = new FakeWorker();
     await expect(

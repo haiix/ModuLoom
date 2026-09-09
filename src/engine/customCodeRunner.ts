@@ -1,7 +1,9 @@
-import type { NodeDefinition } from '../types';
+import { parse } from 'acorn';
 
-export const CUSTOM_CODE_TIMEOUT_MS = 1_000;
-export const CUSTOM_CODE_MAX_RESULT_BYTES = 1_048_576;
+import type { NodeDefinition } from '../types';
+import { CUSTOM_CODE_MAX_RESULT_BYTES, CUSTOM_CODE_TIMEOUT_MS } from './customCodePolicy';
+
+export { CUSTOM_CODE_MAX_RESULT_BYTES, CUSTOM_CODE_TIMEOUT_MS } from './customCodePolicy';
 
 const FORBIDDEN_TOKENS = [
   'document',
@@ -29,6 +31,8 @@ const FORBIDDEN_TOKENS = [
   'prototype',
   'Atomics',
   'SharedArrayBuffer',
+  'setTimeout',
+  'setInterval',
 ] as const;
 
 export class CustomCodeExecutionError extends Error {
@@ -55,7 +59,7 @@ export function validateCustomCode(code: string): void {
     }
   }
   try {
-    new Function('inputs', `return (${code});`);
+    parse(`(${code}\n)`, { ecmaVersion: 'latest' });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CustomCodeExecutionError(`式の構文エラー: ${message}`);
