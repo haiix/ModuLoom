@@ -60,6 +60,8 @@ npm run dev
 | `npm run format:check` | Prettier の整形差分を検査             |
 | `npm test`             | Vitest のテストを1回実行              |
 | `npm run test:watch`   | Vitest を監視モードで起動             |
+| `npm run test:e2e`     | Playwright E2Eテストを実行            |
+| `npm run test:e2e:ui`  | Playwright UIモードを起動             |
 | `npm run clean`        | `dist` を削除                         |
 
 `clean` は Node.js のファイルシステムAPIを使用するため、各対応OSで実行できます。
@@ -83,6 +85,7 @@ npm run dev
 - ESLint 10
 - Prettier 3
 - Vitest 5
+- Playwright
 
 評価処理、保存、コード生成はブラウザ内で行われます。現時点でバックエンドやデータベースはありません。
 
