@@ -10,6 +10,7 @@ import type {
 import { BUILTIN_NODES } from '../nodes/definitions';
 import { generateNodesForCustomType } from '../nodes/customTypeNodes';
 import { getTopologicalOrder } from './dagEngine';
+import { createCustomNodeEvaluator, validateCustomCode } from './customCodeRunner';
 import { isTypeCompatible } from './typeSystem';
 
 export const CURRENT_PROJECT_VERSION = '1.0.0' as const;
@@ -260,21 +261,16 @@ function parseCustomDefinition(value: unknown, path: string): NodeDefinition {
   const primaryOutputId = outputs[0].id;
   let evaluate: NodeDefinition['evaluate'] = () => ({});
   if (customCode) {
-    let compiled: (inputs: Record<string, unknown>) => unknown;
     try {
-      compiled = new Function('inputs', `return (${customCode});`) as typeof compiled;
+      validateCustomCode(customCode);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      fail(`${path}.customCode`, `式の構文エラー: ${message}`);
+      const message = (error instanceof Error ? error.message : String(error)).replace(
+        /^カスタム関数エラー: /,
+        '',
+      );
+      fail(`${path}.customCode`, message);
     }
-    evaluate = (inputs) => {
-      try {
-        return { [primaryOutputId]: compiled(inputs) };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`カスタム関数エラー: ${message}`, { cause: error });
-      }
-    };
+    evaluate = createCustomNodeEvaluator(customCode, primaryOutputId);
   }
 
   return {
@@ -288,7 +284,7 @@ function parseCustomDefinition(value: unknown, path: string): NodeDefinition {
     evaluate,
     ...(definition.defaultState !== undefined ? { defaultState: definition.defaultState } : {}),
     ...(customCode ? { customCode } : {}),
-    ...(isAsync ? { isAsync: true } : {}),
+    ...(isAsync || customCode ? { isAsync: true } : {}),
     ...(isComposite ? { isComposite: true, compositeSubgraph } : {}),
   };
 }

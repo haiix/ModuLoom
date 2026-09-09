@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { DataType, NodeDefinition, Port, CustomTypeDefinition, getTypeStyle } from '../types';
 import { X, Plus, Trash2, Check, AlertCircle, Code2, Copy, Edit3, Sparkles } from 'lucide-react';
+import {
+  createCustomNodeEvaluator,
+  executeCustomCode,
+  validateCustomCode,
+} from '../engine/customCodeRunner';
 
 interface CustomNodeModalProps {
   isOpen: boolean;
@@ -37,6 +42,7 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
   const [expression, setExpression] = useState('inputs.a + inputs.b');
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Initialize or reset form whenever modal opens in create mode
@@ -132,9 +138,10 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
     );
   };
 
-  const handleTestExpression = () => {
+  const handleTestExpression = async () => {
     setTestError(null);
     setTestResult(null);
+    setIsTesting(true);
     try {
       const testInputs: Record<string, any> = {};
       for (const p of inputs) {
@@ -150,11 +157,12 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                   ? [1, 2]
                   : {});
       }
-      const fn = new Function('inputs', `return (${expression});`);
-      const res = fn(testInputs);
+      const res = await executeCustomCode(expression, testInputs);
       setTestResult(JSON.stringify(res));
-    } catch (err: any) {
-      setTestError(err?.message || '式を実行できませんでした');
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : '式を実行できませんでした');
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -191,16 +199,10 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
       return;
     }
 
-    // Test run validation
     try {
-      const testInputs: Record<string, any> = {};
-      for (const p of inputs) {
-        testInputs[p.id] = p.defaultValue ?? 0;
-      }
-      const testFn = new Function('inputs', `return (${cleanExpression});`);
-      testFn(testInputs);
-    } catch (testErr: any) {
-      setError(`式の構文エラー: ${testErr?.message}`);
+      validateCustomCode(cleanExpression);
+    } catch (testErr) {
+      setError(testErr instanceof Error ? testErr.message : '式を検証できませんでした');
       return;
     }
 
@@ -238,15 +240,8 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
       inputs: clonedInputs,
       outputs: clonedOutputs,
       customCode: savedExpression,
-      evaluate: (inputsRecord) => {
-        try {
-          const fn = new Function('inputs', `return (${savedExpression});`);
-          const res = fn(inputsRecord);
-          return { [primaryOutputId]: res };
-        } catch (err: any) {
-          throw new Error(`カスタム関数エラー: ${err?.message}`, { cause: err });
-        }
-      },
+      isAsync: true,
+      evaluate: createCustomNodeEvaluator(savedExpression, primaryOutputId),
     };
 
     onSave(customDef);
@@ -521,9 +516,10 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                   <button
                     type="button"
                     onClick={handleTestExpression}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium flex items-center gap-1"
+                    disabled={isTesting}
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium flex items-center gap-1 disabled:opacity-50"
                   >
-                    <span>式のテスト実行</span>
+                    <span>{isTesting ? 'Workerで実行中…' : '式のテスト実行'}</span>
                   </button>
                 </div>
                 <textarea
@@ -536,6 +532,9 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                 <p className="text-[11px] text-slate-500 mt-1">
                   副作用のない純粋な式を入力してください。例: <code>inputs.a * 1.1</code> や{' '}
                   <code>inputs.a &gt; 0 ? inputs.a : 0</code>
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  式は隔離Workerで実行され、1秒で停止します。DOM、通信、ストレージ、動的コード生成は使用できません。
                 </p>
 
                 {/* Test result status */}

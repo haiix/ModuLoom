@@ -122,6 +122,8 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 
 複合ノードには対応する `evaluateCompositeNode` と `evaluateCompositeNodeAsync` もあります。
 
+自作ノードの評価は `customCodeRunner.ts` の `createCustomNodeEvaluator` を必ず利用し、UIや読み込み処理で式を直接実行しないでください。禁止APIの変更は `validateCustomCode`、時間・サイズ上限は同ファイルの定数へ集約します。非同期評価のキャンセルは `EvaluationContext.signal` を通じて伝播するため、新しい長時間ノードも可能ならSignalを監視してください。
+
 ## TypeScript 生成を変更する
 
 生成処理は `src/engine/dagEngine.ts` 後半、組み込みノードの生成メタデータは `src/nodes/codegen.ts` にあります。ランタイムの `evaluate` 関数から自動生成しているわけではないため、新しい組み込みノードには同じ `typeId` の生成メタデータが必要です。欠落した定義は登録時またはコード生成前にエラーになります。

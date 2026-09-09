@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { evaluateGraph } from '../src/engine/dagEngine';
+import { evaluateGraph, evaluateGraphAsync } from '../src/engine/dagEngine';
 import {
   CURRENT_PROJECT_VERSION,
   parseFlowProject,
@@ -164,7 +164,10 @@ function createCompositeRoundTripProject(): FlowProjectExport {
 }
 
 describe('project file round trip', () => {
-  it('自作ノードをJSON保存・再読み込みして同じ結果を得る', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('自作ノードをJSON保存・再読み込みして同じ結果を得る', async () => {
+    vi.stubGlobal('Worker', EvaluatingWorker);
     const original = createRoundTripProject();
     const originalDefinitions = new Map(
       [...BUILTIN_NODES, ...original.customDefinitions!].map((definition) => [
@@ -181,13 +184,15 @@ describe('project file round trip', () => {
         definition,
       ]),
     );
-    const after = evaluateGraph(loaded.nodes, loaded.connections, loadedDefinitions);
+    const after = await evaluateGraphAsync(loaded.nodes, loaded.connections, loadedDefinitions);
 
     expect(before.output.outputs.displayedValue).toBe(42);
     expect(after.output.outputs.displayedValue).toBe(42);
     expect(loaded.viewport).toEqual(original.viewport);
     expect(loaded.customDefinitions![0].description).toBe('');
-    expect(loaded.customDefinitions![0].evaluate({ value: 5 })).toEqual({ result: 10 });
+    await expect(loaded.customDefinitions![0].evaluate({ value: 5 })).resolves.toEqual({
+      result: 10,
+    });
   });
 
   it('複合ノードをJSON保存・再読み込みして同じ結果を得る', () => {
@@ -207,6 +212,22 @@ describe('project file round trip', () => {
     ]);
   });
 });
+
+class EvaluatingWorker {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
+
+  postMessage(message: { code: string; inputs: Record<string, unknown> }) {
+    Promise.resolve()
+      .then(() => new Function('inputs', `return (${message.code});`)(message.inputs))
+      .then((value) => this.onmessage?.({ data: { ok: true, value } } as MessageEvent))
+      .catch((error) =>
+        this.onmessage?.({ data: { ok: false, error: String(error) } } as MessageEvent),
+      );
+  }
+
+  terminate() {}
+}
 
 describe('project schema validation', () => {
   it('未対応バージョンを明確なメッセージで拒否する', () => {

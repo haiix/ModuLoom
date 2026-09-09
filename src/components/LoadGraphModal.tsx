@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { FlowProjectExport } from '../types';
 import { Upload, AlertCircle, CheckCircle2, X, AlertTriangle } from 'lucide-react';
 import { parseFlowProjectJson } from '../engine/projectFormat';
+import { canApplyProject, projectRequiresCodeTrust } from '../engine/projectTrust';
 
 interface LoadGraphModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
   const [previewProject, setPreviewProject] = useState<FlowProjectExport | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [trustConfirmed, setTrustConfirmed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -28,6 +30,7 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
     setError(null);
     setPreviewProject(null);
     setFileName(file.name);
+    setTrustConfirmed(false);
 
     if (!file.name.endsWith('.json') && file.type !== 'application/json') {
       setError('JSONファイル (.json) を選択してください。');
@@ -71,7 +74,7 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
   };
 
   const handleApply = () => {
-    if (previewProject) {
+    if (previewProject && canApplyProject(previewProject, trustConfirmed)) {
       onLoadProject(previewProject);
       handleClose();
     }
@@ -81,6 +84,7 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
     setPreviewProject(null);
     setError(null);
     setFileName('');
+    setTrustConfirmed(false);
     onClose();
   };
 
@@ -192,13 +196,18 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
                 </div>
               )}
 
-              {previewProject.customDefinitions?.some((definition) => definition.customCode) && (
-                <div className="flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {projectRequiresCodeTrust(previewProject) && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                  <input
+                    type="checkbox"
+                    checked={trustConfirmed}
+                    onChange={(event) => setTrustConfirmed(event.target.checked)}
+                    className="mt-0.5"
+                  />
                   <span>
-                    自作ノードには実行可能なJavaScript式が含まれます。信頼できるファイルだけを復元してください。
+                    このファイルの作成元を信頼し、含まれるJavaScript式を読み込みます。式は隔離Workerで実行されますが、信頼できるファイルだけを適用してください。
                   </span>
-                </div>
+                </label>
               )}
             </div>
           )}
@@ -213,7 +222,7 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
             キャンセル
           </button>
           <button
-            disabled={!previewProject}
+            disabled={!canApplyProject(previewProject, trustConfirmed)}
             onClick={handleApply}
             className="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
           >

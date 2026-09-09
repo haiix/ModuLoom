@@ -64,6 +64,7 @@ export interface NodeDefinition {
   evaluate: (
     inputs: Record<string, any>,
     state?: any,
+    context?: EvaluationContext,
   ) => Promise<Record<string, any>> | Record<string, any>;
   defaultState?: any;
   customCode?: string; // For user-defined custom pure functions
@@ -71,6 +72,10 @@ export interface NodeDefinition {
   isAsync?: boolean;
   isComposite?: boolean; // True for composite node groups
   compositeSubgraph?: CompositeSubgraph; // Internal subgraph definition
+}
+
+export interface EvaluationContext {
+  signal?: AbortSignal;
 }
 
 export interface NodeCodegenContext {
