@@ -35,6 +35,7 @@ import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
 import { CURRENT_PROJECT_VERSION } from './engine/projectFormat';
+import { DagExecutionDebugger, type ExecutionDebuggerSnapshot } from './engine/executionDebugger';
 import {
   commitEditorDocument,
   createEditorHistory,
@@ -130,10 +131,10 @@ export default function App() {
   const [isLiveReactive, setIsLiveReactive] = useState(true);
   const [manualEvalTrigger, setManualEvalTrigger] = useState(0);
 
-  // Stepping execution
-  const [stepIndex, setStepIndex] = useState<number | null>(null);
-  const [isPlayingStep, setIsPlayingStep] = useState(false);
-  const stepTimerRef = useRef<number | null>(null);
+  // Isolated execution debugger state. Normal reactive evaluation remains in `evaluation`.
+  const executionDebuggerRef = useRef<DagExecutionDebugger | null>(null);
+  const [debugSnapshot, setDebugSnapshot] = useState<ExecutionDebuggerSnapshot | null>(null);
+  const [breakpointNodeIds, setBreakpointNodeIds] = useState<Set<string>>(new Set());
 
   // Auto-generate Constructor, Deconstructor, and Validator nodes for each custom type!
   const customTypeGeneratedNodes = useMemo(() => {
@@ -275,36 +276,18 @@ export default function App() {
     };
   }, [nodes, connections, definitionsMap, isLiveReactive, manualEvalTrigger]);
 
-  // Step active node ID
-  const stepActiveNodeId = useMemo(() => {
-    if (stepIndex === null || stepIndex < 0 || stepIndex >= topoOrder.length) {
-      return null;
-    }
-    return topoOrder[stepIndex];
-  }, [stepIndex, topoOrder]);
+  const displayedEvaluation = debugSnapshot?.evaluation ?? evaluation;
+  const stepActiveNodeId = debugSnapshot?.nextNodeId ?? null;
 
-  // Auto-play step execution loop
+  // Graph edits invalidate the frozen debugger snapshot and safely stop pending work.
   useEffect(() => {
-    if (isPlayingStep) {
-      stepTimerRef.current = window.setInterval(() => {
-        setStepIndex((prev) => {
-          if (prev === null) return 0;
-          if (prev + 1 >= topoOrder.length) {
-            setIsPlayingStep(false);
-            return null; // Complete
-          }
-          return prev + 1;
-        });
-      }, 700);
-    } else {
-      if (stepTimerRef.current) {
-        clearInterval(stepTimerRef.current);
-      }
-    }
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
     return () => {
-      if (stepTimerRef.current) clearInterval(stepTimerRef.current);
+      executionDebuggerRef.current?.cancel();
     };
-  }, [isPlayingStep, topoOrder.length]);
+  }, [nodes, connections, definitionsMap]);
 
   // Handlers for Canvas & Graph Manipulation
   const handleFinishNodeDrag = useCallback(() => {
@@ -348,7 +331,6 @@ export default function App() {
       next.delete(id);
       return next;
     });
-    if (stepIndex !== null) setStepIndex(null);
   };
 
   // Reevaluate specific node and its downstream dependencies
@@ -526,8 +508,9 @@ export default function App() {
     }));
     setZoom(1.0);
     setPan({ x: 60, y: 80 });
-    setStepIndex(null);
-    setIsPlayingStep(false);
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
   };
 
   const hideOnboarding = (status: 'skipped' | 'completed') => {
@@ -542,8 +525,9 @@ export default function App() {
   const handleClearGraph = () => {
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
     updateEditorDocument((document) => ({ ...document, nodes: [], connections: [] }));
-    setStepIndex(null);
-    setIsPlayingStep(false);
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
     setEvaluation({});
     setEvalStats({ dirtyCount: 0, totalCount: 0, lastDirtyNodeIds: [] });
   };
@@ -971,20 +955,23 @@ export default function App() {
       setZoom(project.viewport.zoom ?? 1.0);
       setPan(project.viewport.pan ?? { x: 60, y: 80 });
     }
-    setStepIndex(null);
-    setIsPlayingStep(false);
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
   };
 
   const handleUndo = useCallback(() => {
     setEditorHistory(undoEditorHistory);
-    setStepIndex(null);
-    setIsPlayingStep(false);
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
   }, []);
 
   const handleRedo = useCallback(() => {
     setEditorHistory(redoEditorHistory);
-    setStepIndex(null);
-    setIsPlayingStep(false);
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
   }, []);
 
   useEffect(() => {
@@ -1074,30 +1061,58 @@ export default function App() {
     });
   };
 
-  // Stepping controls
-  const handleStepNext = () => {
-    setIsPlayingStep(false);
-    setStepIndex((prev) => {
-      if (prev === null) return 0;
-      if (prev + 1 >= topoOrder.length) return 0;
-      return prev + 1;
+  // Execution debugger controls
+  const handleStartDebug = () => {
+    executionDebuggerRef.current?.cancel();
+    const dirtyNodeIds =
+      evalStats.dirtyCount > 0 && evalStats.dirtyCount < evalStats.totalCount
+        ? new Set(evalStats.lastDirtyNodeIds)
+        : undefined;
+    const session = new DagExecutionDebugger(nodes, connections, definitionsMap, {
+      previousEvaluation: evaluationRef.current,
+      dirtyNodeIds,
+      breakpoints: breakpointNodeIds,
     });
+    executionDebuggerRef.current = session;
+    setDebugSnapshot(session.getSnapshot());
   };
 
-  const handleResetStep = () => {
-    setIsPlayingStep(false);
-    setStepIndex(null);
+  const handleStepNext = async () => {
+    if (!executionDebuggerRef.current) handleStartDebug();
+    const session = executionDebuggerRef.current;
+    if (session) await session.step(setDebugSnapshot);
   };
 
-  const handleTogglePlayStep = () => {
-    if (isPlayingStep) {
-      setIsPlayingStep(false);
-    } else {
-      if (stepIndex === null || stepIndex >= topoOrder.length - 1) {
-        setStepIndex(0);
-      }
-      setIsPlayingStep(true);
-    }
+  const handleContinueDebug = async () => {
+    if (!executionDebuggerRef.current) handleStartDebug();
+    const session = executionDebuggerRef.current;
+    if (session) await session.continue(setDebugSnapshot);
+  };
+
+  const handleStopDebug = () => {
+    executionDebuggerRef.current?.cancel(setDebugSnapshot);
+    executionDebuggerRef.current = null;
+  };
+
+  const handleCloseDebugSession = () => {
+    executionDebuggerRef.current?.cancel();
+    executionDebuggerRef.current = null;
+    setDebugSnapshot(null);
+  };
+
+  const handleToggleDagViewer = () => {
+    if (showDagViewer) handleCloseDebugSession();
+    setShowDagViewer((visible) => !visible);
+  };
+
+  const handleToggleBreakpoint = (nodeId: string) => {
+    setBreakpointNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      executionDebuggerRef.current?.setBreakpoints(next);
+      return next;
+    });
   };
 
   // Generate TypeScript Code
@@ -1135,7 +1150,7 @@ export default function App() {
         onOpenCodeExportModal={() => setIsCodeExportModalOpen(true)}
         onManualReevaluate={() => setManualEvalTrigger((t) => t + 1)}
         showDagViewer={showDagViewer}
-        onToggleDagViewer={() => setShowDagViewer((v) => !v)}
+        onToggleDagViewer={handleToggleDagViewer}
         onOpenOnboarding={() => setShowOnboarding(true)}
         nodeCount={nodes.length}
       />
@@ -1158,7 +1173,7 @@ export default function App() {
           nodes={nodes}
           connections={connections}
           definitions={definitionsMap}
-          evaluation={evaluation}
+          evaluation={displayedEvaluation}
           stepActiveNodeId={stepActiveNodeId}
           customTypes={customTypes}
           selectedNodeIds={selectedNodeIds}
@@ -1214,19 +1229,22 @@ export default function App() {
 
         {/* Floating DAG Topological Execution Visualizer */}
         {showDagViewer && nodes.length > 0 && (
-          <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-30 max-w-2xl animate-in slide-in-from-bottom-2 duration-150">
+          <div className="fixed bottom-4 left-4 right-4 z-30 max-w-5xl animate-in slide-in-from-bottom-2 duration-150 md:left-auto md:right-4">
             <TopologicalVisualizer
               order={topoOrder}
               hasCycle={hasCycle}
               nodes={nodes}
               definitions={definitionsMap}
-              evaluation={evaluation}
-              stepIndex={stepIndex}
+              evaluation={displayedEvaluation}
+              debuggerSnapshot={debugSnapshot}
+              breakpointNodeIds={breakpointNodeIds}
               customTypes={customTypes}
+              onStart={handleStartDebug}
               onStepNext={handleStepNext}
-              onResetStep={handleResetStep}
-              onTogglePlayStep={handleTogglePlayStep}
-              isPlayingStep={isPlayingStep}
+              onContinue={handleContinueDebug}
+              onStop={handleStopDebug}
+              onCloseSession={handleCloseDebugSession}
+              onToggleBreakpoint={handleToggleBreakpoint}
             />
           </div>
         )}

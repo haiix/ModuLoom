@@ -138,7 +138,7 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 
 ## テスト
 
-`tests/` には型システム、DAG操作・同期評価、AsyncIteratorユーティリティの単体テストがあります。
+`tests/` には型システム、DAG操作・同期評価、実行デバッガー、AsyncIteratorユーティリティの単体テストがあります。
 
 ```bash
 npm test

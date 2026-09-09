@@ -121,6 +121,12 @@ type BuiltinDataType =
 
 初回評価とプロジェクト全置換では全ノードを評価します。
 
+## 実行デバッガー
+
+`DagExecutionDebugger` は通常のリアクティブ評価と状態を共有せず、開始時点のグラフ、定義、前回評価を固定したセッションとして動作します。トポロジカル順の次ノードを実行前に公開し、`step` は1ノードだけ、`continue` は次のブレークポイント直前または末尾まで進めます。グラフ編集時はセッションをキャンセルして破棄するため、古い接続に対するデバッグ結果は残りません。
+
+各トレースには解決済み入力、出力、時間、キャッシュ利用、前回結果との差分、エラー伝播元からのノードID列を保存します。Promise待機中とStream収集中は待機状態を通知します。停止時は評価関数の `AbortSignal` を中断し、対応するStreamの `cancel`／Iteratorの `return` を呼びます。通常評価の結果は別に維持され、デバッグ画面を閉じると即座に通常表示へ戻ります。
+
 ## 複合ノード
 
 グループ出力端子から逆向き幅優先探索し、到達できる全ノードと内部接続を `CompositeSubgraph` に保存します。探索はグループ入力端子で止まり、それより上流の外部ノードは複合化しません。グループ入力端子が外部入力、グループ出力端子が外部出力になります。
@@ -175,6 +181,7 @@ type BuiltinDataType =
 | `src/engine/graphEditing.ts`         | 複数選択のコピー、移動、削除、整列           |
 | `src/engine/customCodeRunner.ts`     | 自作式のWorker隔離、制限、キャンセル         |
 | `src/engine/projectTrust.ts`         | 読み込み時の実行コード信頼判定               |
+| `src/engine/executionDebugger.ts`    | 逐次実行、停止、トレース、エラー経路         |
 | `src/nodes/definitions.ts`           | 同期組み込みノードとプリセット               |
 | `src/nodes/asyncStreamNodes.ts`      | 非同期・ストリームノード                     |
 | `src/nodes/customTypeNodes.ts`       | カスタム型由来ノードとコード生成定義         |
