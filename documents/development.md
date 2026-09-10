@@ -146,7 +146,10 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 
 ## プロジェクト形式を変更する
 
-保存形式の型は `FlowProjectExport`、書き出しは `App.tsx` の `handleExportJson`、読み込みは `LoadGraphModal.tsx` と `handleLoadProject` にあります。
+保存形式の型は `FlowProjectExport` と `RecoverySnapshot`、共通の書き出し規則は
+`projectSerialization.ts`、ファイル読込の検証は `projectFormat.ts` にあります。
+保存先を追加するときは `serializeFlowProject` の結果を共有し、別のプロジェクト組み立て
+処理を作らないでください。
 
 `version` を上げる場合は、`src/engine/projectFormat.ts` のマイグレーション表へ旧形式からの変換を追加し、往復テストも更新してください。未対応バージョンは適用前に拒否されます。
 

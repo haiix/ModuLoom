@@ -8,7 +8,7 @@ import {
   ProjectValidationError,
 } from '../src/engine/projectFormat';
 import { BUILTIN_NODES } from '../src/nodes/definitions';
-import type { FlowProjectExport, NodeDefinition } from '../src/types';
+import type { LoadedFlowProject, NodeDefinition } from '../src/types';
 
 function createProject(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -24,7 +24,7 @@ function createProject(overrides: Record<string, unknown> = {}): Record<string, 
   };
 }
 
-function createRoundTripProject(): FlowProjectExport {
+function createRoundTripProject(): LoadedFlowProject {
   const doubleDefinition: NodeDefinition = {
     typeId: 'custom/double',
     label: 'Double',
@@ -68,7 +68,7 @@ function createRoundTripProject(): FlowProjectExport {
   };
 }
 
-function createCompositeRoundTripProject(): FlowProjectExport {
+function createCompositeRoundTripProject(): LoadedFlowProject {
   const compositeDefinition: NodeDefinition = {
     typeId: 'composite/double',
     label: 'Composite Double',

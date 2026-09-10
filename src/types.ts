@@ -134,12 +134,18 @@ export interface FlowProjectExport {
   nodes: NodeInstance[];
   connections: Connection[];
   customTypes?: CustomTypeDefinition[];
-  customDefinitions?: NodeDefinition[];
+  customDefinitions?: SerializedNodeDefinition[];
   viewport?: {
     zoom: number;
     pan: { x: number; y: number };
   };
 }
+
+export type SerializedNodeDefinition = Omit<NodeDefinition, 'evaluate' | 'codegen'>;
+
+export type LoadedFlowProject = Omit<FlowProjectExport, 'customDefinitions'> & {
+  customDefinitions?: NodeDefinition[];
+};
 
 interface TypeStyle {
   label: string;

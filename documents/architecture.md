@@ -179,7 +179,18 @@ QuickJS移行によりmain JSはrawで436.08kBから556.96kBへ増加し、別ch
 
 保存時のドキュメント指紋と現在値を比較して未保存状態を判定します。未保存中は `beforeunload` でページ離脱を警告します。状態管理ライブラリは使っていません。ブラウザ更新で作業状態は失われます。
 
-永続化はダウンロードする JSON のみです。関数はJSON化できないため、自作ノードは `customCode`、複合ノードは `compositeSubgraph` を保存します。読み込み時は `projectFormat.ts` が形式とグラフ整合性を検証し、自作ノードの `customCode` から `evaluate` 関数を再構成します。複合ノードは評価エンジンがサブグラフを直接扱います。
+`projectSerialization.ts` の純粋な共通シリアライザーが `EditorDocument` とviewportから
+ダウンロード用・ブラウザ復元用で共通のプロジェクト内容を生成します。`evaluate` と
+`codegen` は明示的に除外し、自作ノードは `customCode`、複合ノードは
+`compositeSubgraph` を保存します。読み込み時は `projectFormat.ts` が形式とグラフ整合性を
+検証し、自作ノードの `customCode` から `evaluate` 関数を再構成します。複合ノードは評価
+エンジンがサブグラフを直接扱います。
+
+ブラウザ復元用の `RecoverySnapshot` はプロジェクト形式の `version` とは独立した
+`storageVersion` を持ち、復元時はコンテナ検証後に同じ `parseFlowProject` を通します。
+IndexedDBへの保存処理は後続Issueで追加します。ノードライブラリ開閉とオンボーディングは
+軽量な端末別UI preferenceとしてLocal Storageに残し、プロジェクトおよび復元スナップ
+ショットへ含めません。
 
 ## レスポンシブ操作UI
 
