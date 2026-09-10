@@ -57,6 +57,26 @@ import {
   type GraphClipboard,
 } from './engine/graphEditing';
 
+const NODE_LIBRARY_STORAGE_KEY = 'moduloom:node-library-open';
+
+function getInitialLibraryOpen(): boolean {
+  let savedState: string | null = null;
+
+  try {
+    savedState = window.localStorage.getItem(NODE_LIBRARY_STORAGE_KEY);
+  } catch {
+    // Fall back to the viewport-based default when storage is unavailable.
+  }
+
+  if (savedState !== null) return savedState === 'true';
+
+  try {
+    return !window.matchMedia('(max-width: 767px)').matches;
+  } catch {
+    return true;
+  }
+}
+
 export default function App() {
   // Empty graph as initial state (no sample nodes by default)
   const [editorHistory, setEditorHistory] = useState(() =>
@@ -112,7 +132,7 @@ export default function App() {
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // UI Drawer & Modal States
-  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(getInitialLibraryOpen);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isCustomTypeModalOpen, setIsCustomTypeModalOpen] = useState(false);
@@ -126,6 +146,14 @@ export default function App() {
       return true;
     }
   });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NODE_LIBRARY_STORAGE_KEY, String(isLibraryOpen));
+    } catch {
+      // The library remains usable when storage is unavailable.
+    }
+  }, [isLibraryOpen]);
 
   // Engine evaluation settings
   const [isLiveReactive, setIsLiveReactive] = useState(true);
@@ -1198,8 +1226,6 @@ export default function App() {
             setZoom(newZoom);
             setPan(newPan);
           }}
-          onOpenLibrary={() => setIsLibraryOpen(true)}
-          onLoadStarterPreset={() => handleSelectPreset(STARTER_PRESET_ID)}
           isLibraryOpen={isLibraryOpen}
         />
 
