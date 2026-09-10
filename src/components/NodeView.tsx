@@ -785,6 +785,9 @@ export const NodeView: React.FC<NodeViewProps> = ({
                     >
                       {/* Socket circle */}
                       <div
+                        data-port-node-id={node.id}
+                        data-port-id={port.id}
+                        data-port-direction="in"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           onPortMouseDown(e, port.id, false);
@@ -804,7 +807,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
                           borderColor: portColor,
                           backgroundColor: isConnected ? portColor : undefined,
                         }}
-                        title={`${port.name} (${port.type})`}
+                        title={`ドラッグして接続・付け替え: ${port.name} (${port.type})`}
                       />
 
                       <div className="flex flex-col min-w-0">
@@ -875,6 +878,9 @@ export const NodeView: React.FC<NodeViewProps> = ({
 
                       {/* Socket circle */}
                       <div
+                        data-port-node-id={node.id}
+                        data-port-id={port.id}
+                        data-port-direction="out"
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           onPortMouseDown(e, port.id, true);
