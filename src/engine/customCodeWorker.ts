@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { evaluateCustomCodeInVm, initializeCustomCodeVm } from './customCodeVm';
+import { evaluateCustomCodeInVm, initializeCustomCodeVm, isFatalVmError } from './customCodeVm';
 
 interface EvaluationRequest {
   id: number;
@@ -36,6 +36,7 @@ workerScope.onmessage = async (event: MessageEvent<EvaluationRequest>) => {
     workerScope.postMessage({
       id,
       ok: false,
+      fatal: isFatalVmError(error),
       error: error instanceof Error ? error.message : String(error),
     });
   }

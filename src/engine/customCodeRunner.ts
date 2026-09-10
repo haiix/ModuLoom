@@ -1,9 +1,19 @@
 import { parse } from 'acorn';
 
 import type { NodeDefinition } from '../types';
-import { CUSTOM_CODE_MAX_RESULT_BYTES, CUSTOM_CODE_TIMEOUT_MS } from './customCodePolicy';
+import {
+  CUSTOM_CODE_MAX_CODE_BYTES,
+  CUSTOM_CODE_MAX_INPUT_BYTES,
+  CUSTOM_CODE_MAX_RESULT_BYTES,
+  CUSTOM_CODE_TIMEOUT_MS,
+} from './customCodePolicy';
 
-export { CUSTOM_CODE_MAX_RESULT_BYTES, CUSTOM_CODE_TIMEOUT_MS } from './customCodePolicy';
+export {
+  CUSTOM_CODE_MAX_CODE_BYTES,
+  CUSTOM_CODE_MAX_INPUT_BYTES,
+  CUSTOM_CODE_MAX_RESULT_BYTES,
+  CUSTOM_CODE_TIMEOUT_MS,
+} from './customCodePolicy';
 
 const FORBIDDEN_TOKENS = [
   'document',
@@ -43,6 +53,12 @@ export class CustomCodeExecutionError extends Error {
 }
 
 export function validateCustomCode(code: string): void {
+  const codeBytes = new TextEncoder().encode(code).byteLength;
+  if (codeBytes > CUSTOM_CODE_MAX_CODE_BYTES) {
+    throw new CustomCodeExecutionError(
+      `式が上限 ${CUSTOM_CODE_MAX_CODE_BYTES} bytes を超えています。`,
+    );
+  }
   if (/\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})/.test(code)) {
     throw new CustomCodeExecutionError('識別子を隠すUnicode/16進エスケープは使用できません。');
   }
@@ -63,6 +79,25 @@ export function validateCustomCode(code: string): void {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CustomCodeExecutionError(`式の構文エラー: ${message}`);
+  }
+}
+
+function validateInputs(inputs: Record<string, unknown>): void {
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(inputs);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CustomCodeExecutionError(`入力をJSONへ変換できません: ${message}`);
+  }
+  if (serialized === undefined) {
+    throw new CustomCodeExecutionError('入力はJSONとしてシリアライズ可能である必要があります。');
+  }
+  const inputBytes = new TextEncoder().encode(serialized).byteLength;
+  if (inputBytes > CUSTOM_CODE_MAX_INPUT_BYTES) {
+    throw new CustomCodeExecutionError(
+      `入力データが上限 ${CUSTOM_CODE_MAX_INPUT_BYTES} bytes を超えています。`,
+    );
   }
 }
 
@@ -235,6 +270,7 @@ export function executeCustomCode(
   options: ExecuteOptions = {},
 ): Promise<unknown> {
   validateCustomCode(code);
+  validateInputs(inputs);
   if (options.workerFactory) {
     const queue = new CustomCodeWorkerQueue(options.workerFactory);
     return queue.execute(code, inputs, options).finally(() => queue.dispose());

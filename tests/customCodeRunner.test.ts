@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  CUSTOM_CODE_MAX_CODE_BYTES,
+  CUSTOM_CODE_MAX_INPUT_BYTES,
   CustomCodeExecutionError,
   disposeCustomCodeWorker,
   executeCustomCode,
@@ -71,6 +73,24 @@ describe('custom code runner', () => {
     );
   });
 
+  it('rejects oversized expressions and inputs before starting a worker', () => {
+    expect(() => validateCustomCode('1'.repeat(CUSTOM_CODE_MAX_CODE_BYTES + 1))).toThrowError(
+      /式が上限 65536 bytes を超えています/,
+    );
+    expect(() =>
+      executeCustomCode('inputs.value', {
+        value: 'x'.repeat(CUSTOM_CODE_MAX_INPUT_BYTES + 1),
+      }),
+    ).toThrowError(/入力データが上限 1048576 bytes を超えています/);
+  });
+
+  it('rejects cyclic inputs before posting them to a worker', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    expect(() => executeCustomCode('inputs', cyclic)).toThrowError(/入力をJSONへ変換できません/);
+  });
+
   it('terminates an unresponsive worker at the time limit', async () => {
     const worker = new FakeWorker();
     await expect(
@@ -100,6 +120,36 @@ describe('custom code runner', () => {
     controller.abort();
     await expect(execution).rejects.toThrowError(/実行がキャンセルされました/);
     expect(worker.terminated).toBe(true);
+  });
+
+  it('drops stale results after abort and succeeds with a recreated worker', async () => {
+    const workers: FakeWorker[] = [];
+    const messages: Array<{ id: number }> = [];
+    vi.stubGlobal(
+      'Worker',
+      class extends FakeWorker {
+        constructor() {
+          super((_target, value) => messages.push(value as { id: number }));
+          workers.push(this);
+        }
+      },
+    );
+    const controller = new AbortController();
+    const first = executeCustomCode('new Promise(() => {})', {}, { signal: controller.signal });
+    const second = executeCustomCode('inputs.value', { value: 'fresh' });
+
+    controller.abort();
+    await expect(first).rejects.toThrowError(/実行がキャンセルされました/);
+    await vi.waitFor(() => expect(workers).toHaveLength(2));
+    expect(workers[0].terminated).toBe(true);
+
+    workers[0].onmessage?.({
+      data: { id: messages[0].id, ok: true, value: 'stale' },
+    } as MessageEvent);
+    workers[1].onmessage?.({
+      data: { id: messages[1].id, ok: true, value: 'fresh' },
+    } as MessageEvent);
+    await expect(second).resolves.toBe('fresh');
   });
 
   it('reports module worker creation failures', async () => {
