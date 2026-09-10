@@ -45,15 +45,27 @@ interface CanvasProps {
   isLibraryOpen?: boolean;
 }
 
-interface DraggingWire {
-  fromNodeId: string;
-  fromPortId: string;
-  fromType: DataType;
+interface DraggingWireBase {
   startX: number;
   startY: number;
   currentX: number;
   currentY: number;
 }
+
+type DraggingWire =
+  | (DraggingWireBase & {
+      origin: 'output';
+      fromNodeId: string;
+      fromPortId: string;
+      wireType: DataType;
+    })
+  | (DraggingWireBase & {
+      origin: 'input';
+      toNodeId: string;
+      toPortId: string;
+      wireType: DataType;
+      existingConnectionId?: string;
+    });
 
 export const Canvas: React.FC<CanvasProps> = ({
   nodes,
@@ -257,40 +269,61 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   };
 
-  // Port Mouse Down: Start dragging connection wire
+  // Port Mouse Down: Start dragging a connection wire from either side.
   const handlePortMouseDown = (
     e: React.MouseEvent,
     nodeId: string,
     portId: string,
     isOutput: boolean,
   ) => {
-    if (!isOutput) return; // Connections originate from outputs
-
     const node = nodes.find((n) => n.id === nodeId);
     const def = node ? definitions.get(node.typeId) : null;
-    const port = def?.outputs.find((p) => p.id === portId);
+    const port = isOutput
+      ? def?.outputs.find((p) => p.id === portId)
+      : def?.inputs.find((p) => p.id === portId);
     if (!node || !port || !containerRef.current) return;
+
+    e.preventDefault();
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const startX = (e.clientX - containerRect.left - pan.x) / zoom;
     const startY = (e.clientY - containerRect.top - pan.y) / zoom;
 
-    const fromType =
-      node.typeId === 'composite/input-port' ? node.state?.portType || port.type : port.type;
-
-    setDraggingWire({
-      fromNodeId: nodeId,
-      fromPortId: portId,
-      fromType,
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-    });
+    if (isOutput) {
+      const fromType =
+        node.typeId === 'composite/input-port' ? node.state?.portType || port.type : port.type;
+      setDraggingWire({
+        origin: 'output',
+        fromNodeId: nodeId,
+        fromPortId: portId,
+        wireType: fromType,
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+      });
+    } else {
+      const toType =
+        node.typeId === 'composite/output-port' ? node.state?.portType || port.type : port.type;
+      const existingConnection = connections.find(
+        (connection) => connection.toNodeId === nodeId && connection.toPortId === portId,
+      );
+      setDraggingWire({
+        origin: 'input',
+        toNodeId: nodeId,
+        toPortId: portId,
+        wireType: toType,
+        existingConnectionId: existingConnection?.id,
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+      });
+    }
     setWireHoverHint(null);
   };
 
-  // Port Mouse Up: Drop wire on input port to create connection
+  // Port Mouse Up: Complete an output -> input connection regardless of drag direction.
   const handlePortMouseUp = (
     _e: React.MouseEvent,
     toNodeId: string,
@@ -298,30 +331,44 @@ export const Canvas: React.FC<CanvasProps> = ({
     isOutput: boolean,
   ) => {
     if (!draggingWire) return;
-    if (isOutput) {
-      // Cannot connect output to output
+    if (
+      (draggingWire.origin === 'output' && isOutput) ||
+      (draggingWire.origin === 'input' && !isOutput)
+    ) {
       setDraggingWire(null);
       setWireHoverHint(null);
       return;
     }
 
-    const toNode = nodes.find((n) => n.id === toNodeId);
-    const toDef = toNode ? definitions.get(toNode.typeId) : null;
-    const toPort = toDef?.inputs.find((p) => p.id === toPortId);
+    const fromNodeId = draggingWire.origin === 'output' ? draggingWire.fromNodeId : toNodeId;
+    const fromPortId = draggingWire.origin === 'output' ? draggingWire.fromPortId : toPortId;
+    const targetNodeId = draggingWire.origin === 'output' ? toNodeId : draggingWire.toNodeId;
+    const targetPortId = draggingWire.origin === 'output' ? toPortId : draggingWire.toPortId;
 
-    if (!toNode || !toPort) {
+    const fromNode = nodes.find((n) => n.id === fromNodeId);
+    const fromDef = fromNode ? definitions.get(fromNode.typeId) : null;
+    const fromPort = fromDef?.outputs.find((p) => p.id === fromPortId);
+    const toNode = nodes.find((n) => n.id === targetNodeId);
+    const toDef = toNode ? definitions.get(toNode.typeId) : null;
+    const toPort = toDef?.inputs.find((p) => p.id === targetPortId);
+
+    if (!fromNode || !fromPort || !toNode || !toPort) {
       setDraggingWire(null);
       setWireHoverHint(null);
       return;
     }
 
     // Type Compatibility Rule:
+    const fromType =
+      fromNode.typeId === 'composite/input-port'
+        ? fromNode.state?.portType || fromPort.type
+        : fromPort.type;
     const toType =
       toNode.typeId === 'composite/output-port'
         ? toNode.state?.portType || toPort.type
         : toPort.type;
 
-    const compatible = isTypeCompatible(draggingWire.fromType, toType, customTypes);
+    const compatible = isTypeCompatible(fromType, toType, customTypes);
     if (!compatible) {
       setDraggingWire(null);
       setWireHoverHint(null);
@@ -329,7 +376,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     // Cycle Detection Rule:
-    const wouldLoop = wouldCreateCycle(connections, draggingWire.fromNodeId, toNodeId);
+    const wouldLoop = wouldCreateCycle(connections, fromNodeId, targetNodeId);
     if (wouldLoop) {
       setDraggingWire(null);
       setWireHoverHint(null);
@@ -339,10 +386,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Add new connection; the parent replaces any existing wire to this input atomically.
     const newConn: Connection = {
       id: `conn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      fromNodeId: draggingWire.fromNodeId,
-      fromPortId: draggingWire.fromPortId,
-      toNodeId,
-      toPortId,
+      fromNodeId,
+      fromPortId,
+      toNodeId: targetNodeId,
+      toPortId: targetPortId,
     };
 
     onAddConnection(newConn);
@@ -395,39 +442,55 @@ export const Canvas: React.FC<CanvasProps> = ({
         currentY,
       });
 
-      // Check if hovering over any input socket
+      // Check whether the pointer is over the opposite kind of socket.
       const hoveredElement = document.elementFromPoint(e.clientX, e.clientY);
-      const portSocket = hoveredElement?.closest('[id^="port-"]');
+      const portSocket = hoveredElement?.closest<HTMLElement>(
+        '[data-port-id][data-port-direction]',
+      );
       if (portSocket) {
-        const idParts = portSocket.id.split('-');
-        // Format: port-nodeId-portId-in
-        const targetNodeId = idParts[1];
-        const targetPortId = idParts[2];
-        const isIn = idParts[3] === 'in';
+        const hoveredNodeId = portSocket.dataset.portNodeId;
+        const hoveredPortId = portSocket.dataset.portId;
+        const hoveredDirection = portSocket.dataset.portDirection;
+        const isOppositePort =
+          (draggingWire.origin === 'output' && hoveredDirection === 'in') ||
+          (draggingWire.origin === 'input' && hoveredDirection === 'out');
 
-        if (isIn && targetNodeId && targetPortId) {
-          const toNode = nodes.find((n) => n.id === targetNodeId);
+        if (isOppositePort && hoveredNodeId && hoveredPortId) {
+          const fromNodeId =
+            draggingWire.origin === 'output' ? draggingWire.fromNodeId : hoveredNodeId;
+          const fromPortId =
+            draggingWire.origin === 'output' ? draggingWire.fromPortId : hoveredPortId;
+          const toNodeId = draggingWire.origin === 'output' ? hoveredNodeId : draggingWire.toNodeId;
+          const toPortId = draggingWire.origin === 'output' ? hoveredPortId : draggingWire.toPortId;
+          const fromNode = nodes.find((n) => n.id === fromNodeId);
+          const fromDef = fromNode ? definitions.get(fromNode.typeId) : null;
+          const fromPort = fromDef?.outputs.find((p) => p.id === fromPortId);
+          const toNode = nodes.find((n) => n.id === toNodeId);
           const toDef = toNode ? definitions.get(toNode.typeId) : null;
-          const toPort = toDef?.inputs.find((p) => p.id === targetPortId);
+          const toPort = toDef?.inputs.find((p) => p.id === toPortId);
 
-          if (toNode && toPort) {
+          if (fromNode && fromPort && toNode && toPort) {
+            const fromType =
+              fromNode.typeId === 'composite/input-port'
+                ? fromNode.state?.portType || fromPort.type
+                : fromPort.type;
             const toType =
               toNode.typeId === 'composite/output-port'
                 ? toNode.state?.portType || toPort.type
                 : toPort.type;
 
-            const compatible = isTypeCompatible(draggingWire.fromType, toType, customTypes);
-            const wouldLoop = wouldCreateCycle(connections, draggingWire.fromNodeId, targetNodeId);
+            const compatible = isTypeCompatible(fromType, toType, customTypes);
+            const wouldLoop = wouldCreateCycle(connections, fromNodeId, toNodeId);
 
             const reason = !compatible
-              ? `型不一致: ${draggingWire.fromType} → ${toType}`
+              ? `型不一致: ${fromType} → ${toType}`
               : wouldLoop
                 ? '循環参照（ループ）を検出したため接続不可'
-                : `接続可能: ${draggingWire.fromType} → ${toType}`;
+                : `接続可能: ${fromType} → ${toType}`;
 
             setWireHoverHint({
-              nodeId: targetNodeId,
-              portId: targetPortId,
+              nodeId: hoveredNodeId,
+              portId: hoveredPortId,
               isCompatible: compatible && !wouldLoop,
               reason,
             });
@@ -489,10 +552,27 @@ export const Canvas: React.FC<CanvasProps> = ({
       setSelectionBox(null);
     }
     if (draggingWire) {
+      if (draggingWire.origin === 'input' && draggingWire.existingConnectionId) {
+        onDeleteConnection(draggingWire.existingConnectionId);
+      }
       setDraggingWire(null);
       setWireHoverHint(null);
     }
   };
+
+  useEffect(() => {
+    if (!draggingWire) return;
+    const finishWireOutsideCanvas = (event: MouseEvent) => {
+      if (event.target instanceof Node && containerRef.current?.contains(event.target)) return;
+      if (draggingWire.origin === 'input' && draggingWire.existingConnectionId) {
+        onDeleteConnection(draggingWire.existingConnectionId);
+      }
+      setDraggingWire(null);
+      setWireHoverHint(null);
+    };
+    window.addEventListener('mouseup', finishWireOutsideCanvas);
+    return () => window.removeEventListener('mouseup', finishWireOutsideCanvas);
+  }, [draggingWire, onDeleteConnection]);
 
   useEffect(() => {
     if (!draggingNode) return;
@@ -637,6 +717,9 @@ export const Canvas: React.FC<CanvasProps> = ({
 
           {/* Render Active Connections */}
           {connections.map((conn) => {
+            if (draggingWire?.origin === 'input' && draggingWire.existingConnectionId === conn.id) {
+              return null;
+            }
             const startPos = portPositions[`${conn.fromNodeId}:${conn.fromPortId}:out`];
             const endPos = portPositions[`${conn.toNodeId}:${conn.toPortId}:in`];
             if (!startPos || !endPos) return null;
@@ -723,10 +806,10 @@ export const Canvas: React.FC<CanvasProps> = ({
             <g className="pointer-events-none">
               <path
                 d={getBezierPath(
-                  draggingWire.startX,
-                  draggingWire.startY,
-                  draggingWire.currentX,
-                  draggingWire.currentY,
+                  draggingWire.origin === 'output' ? draggingWire.startX : draggingWire.currentX,
+                  draggingWire.origin === 'output' ? draggingWire.startY : draggingWire.currentY,
+                  draggingWire.origin === 'output' ? draggingWire.currentX : draggingWire.startX,
+                  draggingWire.origin === 'output' ? draggingWire.currentY : draggingWire.startY,
                 )}
                 fill="none"
                 stroke={
@@ -734,7 +817,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                     ? wireHoverHint.isCompatible
                       ? '#10b981'
                       : '#ef4444'
-                    : getTypeStyle(draggingWire.fromType, customTypes).color
+                    : getTypeStyle(draggingWire.wireType, customTypes).color
                 }
                 strokeWidth={3}
                 strokeDasharray="5 5"
