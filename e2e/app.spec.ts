@@ -182,6 +182,99 @@ test('不正な復元データを部分適用せず、明示的に破棄でき�
   await expect(page.getByRole('status')).toHaveCount(0);
 });
 
+test('復元した自作式は信頼確認前に適用せず、同一内容だけ信頼を継続する', async ({ page }) => {
+  await page.addInitScript(() => {
+    const OriginalWorker = window.Worker;
+    (window as typeof window & { customCodeWorkerStarts: number }).customCodeWorkerStarts = 0;
+    window.Worker = class extends OriginalWorker {
+      constructor(scriptURL: string | URL, options?: WorkerOptions) {
+        super(scriptURL, options);
+        (window as typeof window & { customCodeWorkerStarts: number }).customCodeWorkerStarts += 1;
+      }
+    };
+  });
+
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('moduloom-recovery', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const snapshot = {
+      storageVersion: 1,
+      project: {
+        version: '1.0.0',
+        appName: 'Trust test',
+        exportedAt: '2026-09-10T00:00:00.000Z',
+        nodes: [{ id: 'custom-node', typeId: 'custom/value', x: 10, y: 20 }],
+        connections: [],
+        customTypes: [],
+        customDefinitions: [
+          {
+            typeId: 'custom/value',
+            label: 'Value',
+            category: 'Custom',
+            kind: 'pure',
+            inputs: [],
+            outputs: [{ id: 'result', name: 'result', type: 'number' }],
+            customCode: '42',
+          },
+        ],
+        viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+      },
+      updatedAt: '2026-09-10T00:00:00.000Z',
+      revision: 1,
+      wasDirty: true,
+    };
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction('snapshots', 'readwrite');
+      transaction.objectStore('snapshots').put(snapshot, 'current');
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  });
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: '信頼して復元' })).toBeVisible();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => (window as typeof window & { customCodeWorkerStarts: number }).customCodeWorkerStarts,
+    ),
+  ).toBe(0);
+  await page.getByRole('button', { name: '信頼して復元' }).click();
+  await expect(page.locator('[data-node-id="custom-node"]')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: '信頼して復元' })).toHaveCount(0);
+  await expect(page.locator('[data-node-id="custom-node"]')).toBeVisible();
+
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('moduloom-recovery', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction('snapshots', 'readwrite');
+      const store = transaction.objectStore('snapshots');
+      const request = store.get('current');
+      request.onsuccess = () => {
+        request.result.project.customDefinitions[0].customCode = '43';
+        store.put(request.result, 'current');
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  });
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: '信頼して復元' })).toBeVisible();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+});
+
 test('自作式の非同期処理、VM制限、Worker復旧をQuickJSで処理する', async ({ page }) => {
   const openEditor = async () => {
     const customNodeButton = page.getByRole('button', { name: '自作ノード', exact: true });
