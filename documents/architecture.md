@@ -188,9 +188,14 @@ QuickJS移行によりmain JSはrawで436.08kBから556.96kBへ増加し、別ch
 
 ブラウザ復元用の `RecoverySnapshot` はプロジェクト形式の `version` とは独立した
 `storageVersion` を持ち、復元時はコンテナ検証後に同じ `parseFlowProject` を通します。
-IndexedDBへの保存処理は後続Issueで追加します。ノードライブラリ開閉とオンボーディングは
-軽量な端末別UI preferenceとしてLocal Storageに残し、プロジェクトおよび復元スナップ
-ショットへ含めません。
+編集内容とviewportは400msのデバウンスと2秒の最大待機時間でIndexedDBへ保存し、ページが
+hiddenになる場合とpagehideでも未反映分の保存を開始します。起動時は復元判定が終わるまで
+エディターをmountしないため、空グラフの評価や描画が先行しません。Undo／Redo、評価結果、
+選択、モーダル、クリップボードは保存対象外です。
+
+ノードライブラリ開閉とオンボーディングは軽量な端末別UI preferenceとしてLocal Storageに
+残し、プロジェクトおよび復元スナップショットへ含めません。IndexedDBの読み書き失敗は
+エディターを停止させず警告し、不正スナップショットは自動削除・部分適用しません。
 
 ## レスポンシブ操作UI
 
