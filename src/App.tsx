@@ -5,7 +5,7 @@ import {
   Connection,
   GraphEvaluation,
   CustomTypeDefinition,
-  FlowProjectExport,
+  LoadedFlowProject,
 } from './types';
 import { BUILTIN_NODES, PRESETS } from './nodes/definitions';
 import { INITIAL_CUSTOM_TYPES, generateNodesForCustomType } from './nodes/customTypeNodes';
@@ -34,7 +34,7 @@ import { CustomTypeModal } from './components/CustomTypeModal';
 import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
-import { CURRENT_PROJECT_VERSION } from './engine/projectFormat';
+import { serializeFlowProject } from './engine/projectSerialization';
 import { DagExecutionDebugger, type ExecutionDebuggerSnapshot } from './engine/executionDebugger';
 import {
   commitEditorDocument,
@@ -939,16 +939,11 @@ export default function App() {
 
   // Export JSON project file (Local Download)
   const handleExportJson = useCallback(() => {
-    const projectData: FlowProjectExport = {
-      version: CURRENT_PROJECT_VERSION,
-      appName: 'ModuLoom Project',
-      exportedAt: new Date().toISOString(),
-      nodes,
-      connections,
-      customTypes,
-      customDefinitions,
+    const projectData = serializeFlowProject({
+      document: editorHistory.present,
       viewport: { zoom, pan },
-    };
+      exportedAt: new Date().toISOString(),
+    });
 
     const jsonString = JSON.stringify(projectData, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -962,10 +957,10 @@ export default function App() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     setEditorHistory(markEditorDocumentSaved);
-  }, [connections, customDefinitions, customTypes, nodes, pan, zoom]);
+  }, [editorHistory.present, pan, zoom]);
 
   // Load JSON project from local file
-  const handleLoadProject = (project: FlowProjectExport) => {
+  const handleLoadProject = (project: LoadedFlowProject) => {
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
     setEditorHistory((history) =>
       markEditorDocumentSaved(

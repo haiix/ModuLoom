@@ -14,12 +14,14 @@ interface FlowProjectExport {
   nodes: NodeInstance[];
   connections: Connection[];
   customTypes?: CustomTypeDefinition[];
-  customDefinitions?: NodeDefinition[];
+  customDefinitions?: SerializedNodeDefinition[];
   viewport?: {
     zoom: number;
     pan: { x: number; y: number };
   };
 }
+
+type SerializedNodeDefinition = Omit<NodeDefinition, 'evaluate' | 'codegen'>;
 ```
 
 例:
@@ -110,7 +112,8 @@ interface CustomTypeDefinition {
 
 ## customDefinitions
 
-自作ノードと複合ノードを格納します。`NodeDefinition` には本来 `evaluate` 関数がありますが、関数は JSON に保存できません。
+自作ノードと複合ノードを格納します。保存時は共通シリアライザーが
+`NodeDefinition` の `evaluate` と `codegen` を明示的に除外します。
 
 - 自作ノード: `customCode` の構文をAcornで、禁止APIを製品ポリシーとして同期検証し、Web Worker内で実行して先頭の出力ポートへ結果を返す非同期評価関数を復元する
 - 複合ノード: `compositeSubgraph` を評価エンジンが直接実行するため、JSON読み込み後も評価可能
@@ -157,6 +160,26 @@ interface CompositeSubgraph {
 ## バージョン互換性
 
 読み込み処理は `version` をマイグレーション表で解決してからスキーマ検証します。現在の対応バージョンは `1.0.0` のみです。未対応バージョンは、対応バージョンを示すメッセージとともに拒否します。形式を更新するときは、旧バージョンから現行バージョンへの変換をマイグレーション表へ追加します。
+
+## ブラウザ復元スナップショット
+
+ブラウザ内の復元データはプロジェクト形式を内包する別の形式です。プロジェクトの
+`version` と保存コンテナの `storageVersion` は独立して更新します。
+
+```ts
+interface RecoverySnapshot {
+  storageVersion: 1;
+  project: FlowProjectExport;
+  updatedAt: string;
+  revision: number;
+  wasDirty: boolean;
+  trustedCodeFingerprint?: string;
+}
+```
+
+復元時は `storageVersion` とメタデータを検証し、内包する `project` をファイル読込と同じ
+`parseFlowProject` の検証・マイグレーション経路へ渡します。ノードライブラリ開閉状態と
+オンボーディング状態は端末別UI preferenceのため、このスナップショットにも含めません。
 
 ## セキュリティ
 

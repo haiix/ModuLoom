@@ -2,7 +2,7 @@ import type {
   Connection,
   CompositePortMapping,
   CustomTypeDefinition,
-  FlowProjectExport,
+  LoadedFlowProject,
   NodeDefinition,
   NodeInstance,
   Port,
@@ -368,7 +368,7 @@ export function migrateFlowProject(input: unknown): Record<string, unknown> {
   return migrate(project);
 }
 
-export function parseFlowProject(input: unknown): FlowProjectExport {
+export function parseFlowProject(input: unknown): LoadedFlowProject {
   const project = migrateFlowProject(input);
   const customTypes = (
     project.customTypes === undefined ? [] : expectArray(project.customTypes, 'project.customTypes')
@@ -590,7 +590,7 @@ export function parseFlowProject(input: unknown): FlowProjectExport {
   };
 }
 
-export function parseFlowProjectJson(text: string): FlowProjectExport {
+export function parseFlowProjectJson(text: string): LoadedFlowProject {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

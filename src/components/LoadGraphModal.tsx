@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FlowProjectExport } from '../types';
+import type { LoadedFlowProject } from '../types';
 import { Upload, AlertCircle, CheckCircle2, X, AlertTriangle } from 'lucide-react';
 import { parseFlowProjectJson } from '../engine/projectFormat';
 import { canApplyProject, projectRequiresCodeTrust } from '../engine/projectTrust';
@@ -7,7 +7,7 @@ import { canApplyProject, projectRequiresCodeTrust } from '../engine/projectTrus
 interface LoadGraphModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLoadProject: (project: FlowProjectExport) => void;
+  onLoadProject: (project: LoadedFlowProject) => void;
   currentNodeCount: number;
 }
 
@@ -18,7 +18,7 @@ export const LoadGraphModal: React.FC<LoadGraphModalProps> = ({
   currentNodeCount,
 }) => {
   const [dragActive, setDragActive] = useState(false);
-  const [previewProject, setPreviewProject] = useState<FlowProjectExport | null>(null);
+  const [previewProject, setPreviewProject] = useState<LoadedFlowProject | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [trustConfirmed, setTrustConfirmed] = useState(false);

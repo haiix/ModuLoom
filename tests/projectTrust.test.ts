@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { canApplyProject, projectRequiresCodeTrust } from '../src/engine/projectTrust';
-import type { FlowProjectExport } from '../src/types';
+import type { LoadedFlowProject } from '../src/types';
 
-const baseProject: FlowProjectExport = {
+const baseProject: LoadedFlowProject = {
   version: '1.0.0',
   appName: 'test',
   exportedAt: '2026-09-09T00:00:00.000Z',
@@ -17,7 +17,7 @@ describe('project code trust', () => {
   });
 
   it('requires explicit trust before applying custom code', () => {
-    const project: FlowProjectExport = {
+    const project: LoadedFlowProject = {
       ...baseProject,
       customDefinitions: [
         {
