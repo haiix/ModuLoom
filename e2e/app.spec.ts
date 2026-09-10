@@ -131,12 +131,75 @@ test('四則演算プリセットを実行して結果を表示する', async ({
   await expect(page.locator('[data-node-id="n-out-inspector"]')).toContainText('111');
 });
 
+test('編集内容とviewportを自動保存し、再読み込み時に復元する', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
+
+  const canvas = page.getByLabel('ノードキャンバス');
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width - 120, box!.y + 140);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(box!.x + box!.width - 180, box!.y + 180);
+  await page.mouse.up({ button: 'right' });
+  const savedPosition = await canvas.evaluate(
+    (element) => getComputedStyle(element).backgroundPosition,
+  );
+
+  await page.waitForTimeout(600);
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.reload();
+
+  await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを開く' })).toBeVisible();
+  await expect
+    .poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundPosition))
+    .toBe(savedPosition);
+});
+
+test('不正な復元データを部分適用せず、明示的に破棄できる', async ({ page }) => {
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('moduloom-recovery', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('snapshots');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction('snapshots', 'readwrite');
+      transaction.objectStore('snapshots').put({ storageVersion: 999 }, 'current');
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  });
+
+  await page.reload();
+  await expect(page.getByRole('status')).toContainText('storageVersion');
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+  await page.getByRole('button', { name: '復元データを破棄' }).click();
+  await expect(page.getByRole('status')).toHaveCount(0);
+});
+
 test('自作式の非同期処理、VM制限、Worker復旧をQuickJSで処理する', async ({ page }) => {
   const openEditor = async () => {
-    if (!(await page.getByRole('button', { name: '自作ノード', exact: true }).isVisible())) {
+    const customNodeButton = page.getByRole('button', { name: '自作ノード', exact: true });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (await customNodeButton.isVisible()) {
+        await customNodeButton.click();
+        return;
+      }
       await page.getByRole('button', { name: 'ノードを追加', exact: true }).click();
+      try {
+        await customNodeButton.waitFor({ state: 'visible', timeout: 3_000 });
+      } catch {
+        // Vite dependency optimization may reload immediately after the first interaction.
+        await page.waitForLoadState('domcontentloaded');
+        continue;
+      }
     }
-    await page.getByRole('button', { name: '自作ノード', exact: true }).click();
+    await customNodeButton.click();
   };
   const runInitialPromise = async () => {
     await page

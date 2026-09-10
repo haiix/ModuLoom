@@ -34,7 +34,19 @@ import { CustomTypeModal } from './components/CustomTypeModal';
 import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
-import { serializeFlowProject } from './engine/projectSerialization';
+import {
+  createRecoverySnapshot,
+  serializeFlowProject,
+  type ParsedRecoverySnapshot,
+} from './engine/projectSerialization';
+import {
+  discardRecoverySnapshot,
+  InvalidRecoverySnapshotError,
+  loadRecoverySnapshot,
+  saveRecoverySnapshot,
+} from './engine/recoveryStorage';
+import { DebouncedSave } from './engine/debouncedSave';
+import { projectRequiresCodeTrust } from './engine/projectTrust';
 import { DagExecutionDebugger, type ExecutionDebuggerSnapshot } from './engine/executionDebugger';
 import {
   commitEditorDocument,
@@ -77,14 +89,112 @@ function getInitialLibraryOpen(): boolean {
   }
 }
 
+interface RecoveryBootstrapState {
+  loading: boolean;
+  snapshot: ParsedRecoverySnapshot | null;
+  warning: string | null;
+  requiresDiscard: boolean;
+}
+
 export default function App() {
+  const [recovery, setRecovery] = useState<RecoveryBootstrapState>({
+    loading: true,
+    snapshot: null,
+    warning: null,
+    requiresDiscard: false,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadRecoverySnapshot()
+      .then((snapshot) => {
+        if (cancelled) return;
+        if (snapshot && projectRequiresCodeTrust(snapshot.project)) {
+          setRecovery({
+            loading: false,
+            snapshot: null,
+            warning: '自作式を含む復元データは、安全な信頼確認が完了するまで自動適用されません。',
+            requiresDiscard: true,
+          });
+          return;
+        }
+        setRecovery({ loading: false, snapshot, warning: null, requiresDiscard: false });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setRecovery({
+          loading: false,
+          snapshot: null,
+          warning: error instanceof Error ? error.message : '復元データを読み込めませんでした。',
+          requiresDiscard: error instanceof InvalidRecoverySnapshotError,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleDiscardRecovery = async () => {
+    try {
+      await discardRecoverySnapshot();
+      setRecovery((current) => ({
+        ...current,
+        warning: null,
+        requiresDiscard: false,
+      }));
+    } catch (error) {
+      setRecovery((current) => ({
+        ...current,
+        warning: error instanceof Error ? error.message : '復元データを破棄できませんでした。',
+      }));
+    }
+  };
+
+  if (recovery.loading) {
+    return (
+      <main className="flex h-screen items-center justify-center bg-slate-100 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+        保存済みプロジェクトを確認しています…
+      </main>
+    );
+  }
+
+  return (
+    <EditorApp
+      initialSnapshot={recovery.snapshot}
+      recoveryWarning={recovery.warning}
+      autosaveEnabled={!recovery.requiresDiscard}
+      onDiscardRecovery={() => void handleDiscardRecovery()}
+    />
+  );
+}
+
+interface RecoverySaveInput {
+  document: EditorDocument;
+  viewport: { zoom: number; pan: { x: number; y: number } };
+  wasDirty: boolean;
+}
+
+interface EditorAppProps {
+  initialSnapshot: ParsedRecoverySnapshot | null;
+  recoveryWarning: string | null;
+  autosaveEnabled: boolean;
+  onDiscardRecovery: () => void;
+}
+
+function EditorApp({
+  initialSnapshot,
+  recoveryWarning,
+  autosaveEnabled,
+  onDiscardRecovery,
+}: EditorAppProps) {
+  const initialProject = initialSnapshot?.project;
   // Empty graph as initial state (no sample nodes by default)
   const [editorHistory, setEditorHistory] = useState(() =>
     createEditorHistory({
-      nodes: [],
-      connections: [],
-      customDefinitions: [],
-      customTypes: INITIAL_CUSTOM_TYPES,
+      nodes: initialProject?.nodes ?? [],
+      connections: initialProject?.connections ?? [],
+      customDefinitions: initialProject?.customDefinitions ?? [],
+      customTypes: initialProject?.customTypes ?? INITIAL_CUSTOM_TYPES,
     }),
   );
   const { nodes, connections, customDefinitions, customTypes } = editorHistory.present;
@@ -128,8 +238,63 @@ export default function App() {
   );
 
   // Canvas viewport
-  const [zoom, setZoom] = useState<number>(1.0);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState<number>(initialProject?.viewport?.zoom ?? 1.0);
+  const [pan, setPan] = useState<{ x: number; y: number }>(
+    initialProject?.viewport?.pan ?? { x: 0, y: 0 },
+  );
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const revisionRef = useRef(initialSnapshot?.revision ?? 0);
+  const initialAutosaveRenderRef = useRef(true);
+  const saveSchedulerRef = useRef<DebouncedSave<RecoverySaveInput> | null>(null);
+  if (saveSchedulerRef.current === null) {
+    saveSchedulerRef.current = new DebouncedSave(
+      async ({ document, viewport, wasDirty }) => {
+        const now = new Date().toISOString();
+        const project = serializeFlowProject({ document, viewport, exportedAt: now });
+        const revision = revisionRef.current + 1;
+        await saveRecoverySnapshot(
+          createRecoverySnapshot(project, { updatedAt: now, revision, wasDirty }),
+        );
+        revisionRef.current = revision;
+        setAutosaveError(null);
+      },
+      {
+        delayMs: 400,
+        maxWaitMs: 2_000,
+        onError: (error) =>
+          setAutosaveError(
+            error instanceof Error ? error.message : 'プロジェクトを自動保存できませんでした。',
+          ),
+      },
+    );
+  }
+
+  useEffect(() => {
+    if (initialAutosaveRenderRef.current) {
+      initialAutosaveRenderRef.current = false;
+      return;
+    }
+    if (!autosaveEnabled) return;
+    saveSchedulerRef.current?.schedule({
+      document: editorHistory.present,
+      viewport: { zoom, pan },
+      wasDirty: isDirty,
+    });
+  }, [autosaveEnabled, editorHistory.present, isDirty, pan, zoom]);
+
+  useEffect(() => {
+    const flushPendingSave = () => void saveSchedulerRef.current?.flush();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushPendingSave();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', flushPendingSave);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', flushPendingSave);
+      saveSchedulerRef.current?.dispose();
+    };
+  }, []);
 
   // UI Drawer & Modal States
   const [isLibraryOpen, setIsLibraryOpen] = useState(getInitialLibraryOpen);
@@ -1177,6 +1342,24 @@ export default function App() {
         onOpenOnboarding={() => setShowOnboarding(true)}
         nodeCount={nodes.length}
       />
+
+      {(recoveryWarning || autosaveError) && (
+        <div
+          role="status"
+          className="fixed right-4 top-16 z-40 max-w-md rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 shadow-lg dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+        >
+          <p>{recoveryWarning ?? autosaveError}</p>
+          {recoveryWarning && (
+            <button
+              type="button"
+              className="mt-2 rounded bg-amber-700 px-2 py-1 font-semibold text-white"
+              onClick={onDiscardRecovery}
+            >
+              復元データを破棄
+            </button>
+          )}
+        </div>
+      )}
 
       <CanvasControls
         isLiveReactive={isLiveReactive}
