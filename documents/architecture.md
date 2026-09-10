@@ -108,9 +108,26 @@ type BuiltinDataType =
 
 QuickJSのPromiseは `resolvePromise` と `executePendingJobs` で進行します。ホスト非同期APIは `newPromise` で実装した0〜1,000msの `sleep(ms)` だけを公開し、解決時にpending jobを再開します。汎用タイマーは公開しません。
 
-実行時間は1秒、UTF-8換算の返却データは1MiBが上限です。通常完了後はWorkerとWASM moduleを次の評価に再利用しますが、タイムアウト、AbortSignal中断、Worker異常では外側のWorkerを強制終了し、次のキュー項目から新しいWorkerを起動します。これにより、QuickJSが応答不能になってもUIスレッド側から停止できます。
+各RuntimeはCPU実行750ms、QuickJS heap 16MiB、stack 512KiBに制限します。親スレッドのwall-clock watchdogは1秒です。式はUTF-8で64KiB、入力・返却JSONはそれぞれ1MiBが上限です。通常完了後はWorkerとWASM moduleを次の評価に再利用しますが、Runtime制限超過、親タイムアウト、AbortSignal中断、Worker異常では外側のWorkerを強制終了し、次のキュー項目から新しいWorkerを起動します。古いWorkerの応答IDは現在の評価と一致しないため破棄されます。
 
-事前検証はAcornによる同期式構文検査に加え、DOM、通信、ストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作に関係する識別子を拒否します。禁止トークン検査は製品ポリシーの補助であり、セキュリティ境界はguestとホストの間にあるQuickJS VMとJSONデータ境界です。QuickJS-Emscriptenが1.0未満で未監査であること、Runtime単位のCPU・メモリ上限が未導入であること、生成TypeScriptは隔離されないことは残存リスクです。
+事前検証はAcornによる同期式構文検査に加え、DOM、通信、ストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作に関係する識別子を拒否します。禁止トークン検査は製品ポリシーの補助であり、計算プロパティを含む隔離の境界はguestとホストの間にあるQuickJS VMとJSONデータ境界です。QuickJS-Emscriptenが1.0未満で未監査であること、生成TypeScriptは隔離されないことは残存リスクです。
+
+### 性能基準（2026-09-10）
+
+Node.js 24.20.0／npm 11.19.0 とChromiumで計測しました。移行前は `18932f5`、移行後は本制限を含むQuickJS実装です。数値は機能比較用の単発測定で、CIの固定性能テストにはしません。
+
+| 指標                             |     移行前 |  QuickJS |  許容基準 |
+| -------------------------------- | ---------: | -------: | --------: |
+| 評価器cold start（Node）         |     0.45ms |  31.52ms | 100ms以下 |
+| warm 1評価平均（Node）           | 0.01ms未満 |   1.42ms |  10ms以下 |
+| ブラウザWorker cold start        |          - | 539.70ms | 750ms以下 |
+| ブラウザWorker warm 1評価平均    |          - |   3.02ms |  10ms以下 |
+| カスタムノード10件（直列キュー） |          - |  16.00ms | 100ms以下 |
+| Abort後のWorker再生成と次評価    |          - | 202.50ms | 500ms以下 |
+| main JS（gzip）                  |   120.51kB | 158.52kB | 175kB以下 |
+| Worker JS + WASM（raw）          |          0 | 557.54kB | 600kB以下 |
+
+QuickJS移行によりmain JSはrawで436.08kBから556.96kBへ増加し、別chunkとしてWorker 54.41kBとWASM 503.13kBが追加されます。QuickJSまたはAcornを更新するときは、この表と同じ項目を再計測し、基準超過時は遅延読込やchunk分割を検討します。
 
 ## 差分再評価
 

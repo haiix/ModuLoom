@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@jitl/quickjs-wasmfile-debug-sync": "^0.32.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.4.1",

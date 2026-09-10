@@ -129,7 +129,7 @@ test('四則演算プリセットを実行して結果を表示する', async ({
   await expect(page.locator('[data-node-id="n-out-inspector"]')).toContainText('111');
 });
 
-test('自作式のPromise、sleep、拒否、期限超過をQuickJSで処理する', async ({ page }) => {
+test('自作式の非同期処理、VM制限、Worker復旧をQuickJSで処理する', async ({ page }) => {
   const openEditor = async () => {
     if (!(await page.getByRole('button', { name: '自作ノード', exact: true }).isVisible())) {
       await page.getByRole('button', { name: 'ノードを追加', exact: true }).click();
@@ -147,10 +147,10 @@ test('自作式のPromise、sleep、拒否、期限超過をQuickJSで処理す�
   await openEditor();
   try {
     await runInitialPromise();
-  } catch (error) {
-    if (await page.getByPlaceholder('例: inputs.a + inputs.b').isVisible()) throw error;
-    // A reused Vite dev server can reload once when it first optimizes Worker-only dependencies.
-    await openEditor();
+  } catch {
+    // Dependency optimization can reload the page, and a busy cold build can consume
+    // the first Worker's watchdog. In both cases the recreated Worker must recover.
+    if (!(await page.getByPlaceholder('例: inputs.a + inputs.b').isVisible())) await openEditor();
     await runInitialPromise();
   }
 
@@ -166,9 +166,31 @@ test('自作式のPromise、sleep、拒否、期限超過をQuickJSで処理す�
   await page.getByRole('button', { name: '式のテスト実行' }).click();
   await expect(page.getByText(/実行時エラー:/)).toContainText('rejected');
 
+  await page.getByPlaceholder('例: inputs.a + inputs.b').fill('(() => { while (true) {} })()');
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText(/実行時エラー:/)).toContainText('CPU実行時間が750msを超えたため停止');
+
+  await page
+    .getByPlaceholder('例: inputs.a + inputs.b')
+    .fill('(() => { const recurse = () => recurse(); return recurse(); })()');
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText(/実行時エラー:/)).toContainText(
+    'stack上限 524288 bytes を超えました',
+  );
+
+  await page
+    .getByPlaceholder('例: inputs.a + inputs.b')
+    .fill('Array(20_000_000).fill("xxxxxxxxxxxxxxxx")');
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText(/実行時エラー:/)).toContainText('out of memory');
+
   await page.getByPlaceholder('例: inputs.a + inputs.b').fill('new Promise(() => {})');
   await page.getByRole('button', { name: '式のテスト実行' }).click();
   await expect(page.getByText(/実行時エラー:/)).toContainText('実行時間が1000msを超えたため停止');
+
+  await page.getByPlaceholder('例: inputs.a + inputs.b').fill('inputs.a + inputs.b');
+  await page.getByRole('button', { name: '式のテスト実行' }).click();
+  await expect(page.getByText('テスト実行成功:')).toContainText('30');
 });
 
 test('プリセットの適用を元に戻してやり直せる', async ({ page }) => {

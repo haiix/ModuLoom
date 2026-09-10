@@ -136,6 +136,8 @@ UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ�
 
 自作ノードの評価は `customCodeRunner.ts` の `createCustomNodeEvaluator` を必ず利用し、UIや読み込み処理で式を直接実行しないでください。実行本体は `customCodeWorker.ts` から `customCodeVm.ts` を呼び出し、QuickJSのRuntime／Contextを評価ごとに破棄します。式構文はAcornで同期検証し、禁止APIの変更は `validateCustomCode`、時間・サイズ・`sleep` 上限は `customCodePolicy.ts` の定数へ集約します。非同期評価のキャンセルは `EvaluationContext.signal` を通じて伝播するため、新しい長時間ノードも可能ならSignalを監視してください。
 
+本番bundleは `@jitl/quickjs-wasmfile-release-sync`、VMリソース回帰テストだけは `@jitl/quickjs-wasmfile-debug-sync` を使います。後者を本番コードからimportしないでください。QuickJSを更新するときは `quickjs-emscripten-core` と両variantを同じversionへ揃えます。通常依存は `npm install quickjs-emscripten-core@<version> @jitl/quickjs-wasmfile-release-sync@<version>`、検証依存は `npm install --save-dev @jitl/quickjs-wasmfile-debug-sync@<version>` でlockfileと一緒に更新します。その後、無限ループ、heap／stack超過、101回ずつの成功／例外、E2Eのタイムアウト復旧を含む全検査と、architecture記載の性能・bundle計測を再実行してください。
+
 ## TypeScript 生成を変更する
 
 生成処理は `src/engine/dagEngine.ts` 後半、組み込みノードの生成メタデータは `src/nodes/codegen.ts` にあります。ランタイムの `evaluate` 関数から自動生成しているわけではないため、新しい組み込みノードには同じ `typeId` の生成メタデータが必要です。欠落した定義は登録時またはコード生成前にエラーになります。
