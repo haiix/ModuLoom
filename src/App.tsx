@@ -46,7 +46,10 @@ import {
   saveRecoverySnapshot,
 } from './engine/recoveryStorage';
 import { DebouncedSave } from './engine/debouncedSave';
-import { projectRequiresCodeTrust } from './engine/projectTrust';
+import {
+  createProjectCodeFingerprint,
+  recoverySnapshotHasTrustedCode,
+} from './engine/projectTrust';
 import { DagExecutionDebugger, type ExecutionDebuggerSnapshot } from './engine/executionDebugger';
 import {
   commitEditorDocument,
@@ -92,6 +95,7 @@ function getInitialLibraryOpen(): boolean {
 interface RecoveryBootstrapState {
   loading: boolean;
   snapshot: ParsedRecoverySnapshot | null;
+  pendingTrustSnapshot: ParsedRecoverySnapshot | null;
   warning: string | null;
   requiresDiscard: boolean;
 }
@@ -100,6 +104,7 @@ export default function App() {
   const [recovery, setRecovery] = useState<RecoveryBootstrapState>({
     loading: true,
     snapshot: null,
+    pendingTrustSnapshot: null,
     warning: null,
     requiresDiscard: false,
   });
@@ -107,24 +112,33 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     void loadRecoverySnapshot()
-      .then((snapshot) => {
+      .then(async (snapshot) => {
         if (cancelled) return;
-        if (snapshot && projectRequiresCodeTrust(snapshot.project)) {
+        if (snapshot && !(await recoverySnapshotHasTrustedCode(snapshot))) {
+          if (cancelled) return;
           setRecovery({
             loading: false,
             snapshot: null,
-            warning: '自作式を含む復元データは、安全な信頼確認が完了するまで自動適用されません。',
-            requiresDiscard: true,
+            pendingTrustSnapshot: snapshot,
+            warning: null,
+            requiresDiscard: false,
           });
           return;
         }
-        setRecovery({ loading: false, snapshot, warning: null, requiresDiscard: false });
+        setRecovery({
+          loading: false,
+          snapshot,
+          pendingTrustSnapshot: null,
+          warning: null,
+          requiresDiscard: false,
+        });
       })
       .catch((error) => {
         if (cancelled) return;
         setRecovery({
           loading: false,
           snapshot: null,
+          pendingTrustSnapshot: null,
           warning: error instanceof Error ? error.message : '復元データを読み込めませんでした。',
           requiresDiscard: error instanceof InvalidRecoverySnapshotError,
         });
@@ -141,6 +155,7 @@ export default function App() {
         ...current,
         warning: null,
         requiresDiscard: false,
+        pendingTrustSnapshot: null,
       }));
     } catch (error) {
       setRecovery((current) => ({
@@ -150,10 +165,72 @@ export default function App() {
     }
   };
 
+  const handleTrustRecovery = async () => {
+    const snapshot = recovery.pendingTrustSnapshot;
+    if (!snapshot) return;
+    try {
+      const trustedCodeFingerprint = await createProjectCodeFingerprint(snapshot.project);
+      if (!trustedCodeFingerprint) throw new Error('信頼対象の自作式が見つかりません。');
+      const project = serializeFlowProject({
+        document: {
+          nodes: snapshot.project.nodes,
+          connections: snapshot.project.connections,
+          customDefinitions: snapshot.project.customDefinitions ?? [],
+          customTypes: snapshot.project.customTypes ?? [],
+        },
+        viewport: snapshot.project.viewport ?? { zoom: 1, pan: { x: 60, y: 80 } },
+        exportedAt: snapshot.project.exportedAt,
+      });
+      await saveRecoverySnapshot({ ...snapshot, project, trustedCodeFingerprint });
+      setRecovery({
+        loading: false,
+        snapshot: { ...snapshot, trustedCodeFingerprint },
+        pendingTrustSnapshot: null,
+        warning: null,
+        requiresDiscard: false,
+      });
+    } catch (error) {
+      setRecovery((current) => ({
+        ...current,
+        warning: error instanceof Error ? error.message : '信頼情報を保存できませんでした。',
+      }));
+    }
+  };
+
   if (recovery.loading) {
     return (
       <main className="flex h-screen items-center justify-center bg-slate-100 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">
         保存済みプロジェクトを確認しています…
+      </main>
+    );
+  }
+
+  if (recovery.pendingTrustSnapshot) {
+    return (
+      <main className="flex h-screen items-center justify-center bg-slate-100 p-6 dark:bg-slate-950">
+        <section className="max-w-lg rounded-2xl border border-amber-300 bg-white p-6 shadow-xl dark:border-amber-800 dark:bg-slate-900">
+          <h1 className="font-semibold text-slate-900 dark:text-slate-100">
+            復元プロジェクトの自作式を確認
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            保存されたプロジェクトにJavaScript式が含まれています。内容を信頼する場合だけ復元してください。
+          </p>
+          {recovery.warning && <p className="mt-3 text-xs text-red-600">{recovery.warning}</p>}
+          <div className="mt-5 flex gap-3">
+            <button
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => void handleTrustRecovery()}
+            >
+              信頼して復元
+            </button>
+            <button
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
+              onClick={() => void handleDiscardRecovery()}
+            >
+              復元データを破棄
+            </button>
+          </div>
+        </section>
       </main>
     );
   }
@@ -251,9 +328,15 @@ function EditorApp({
       async ({ document, viewport, wasDirty }) => {
         const now = new Date().toISOString();
         const project = serializeFlowProject({ document, viewport, exportedAt: now });
+        const trustedCodeFingerprint = await createProjectCodeFingerprint(project);
         const revision = revisionRef.current + 1;
         await saveRecoverySnapshot(
-          createRecoverySnapshot(project, { updatedAt: now, revision, wasDirty }),
+          createRecoverySnapshot(project, {
+            updatedAt: now,
+            revision,
+            wasDirty,
+            ...(trustedCodeFingerprint ? { trustedCodeFingerprint } : {}),
+          }),
         );
         revisionRef.current = revision;
         setAutosaveError(null);
