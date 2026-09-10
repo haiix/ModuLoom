@@ -39,8 +39,6 @@ interface CanvasProps {
   zoom: number;
   pan: { x: number; y: number };
   onUpdateZoomPan: (zoom: number, pan: { x: number; y: number }) => void;
-  onOpenLibrary?: () => void;
-  onLoadStarterPreset?: () => void;
   onUnpackComposite?: (nodeId: string) => void;
   isLibraryOpen?: boolean;
 }
@@ -92,8 +90,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   zoom,
   pan,
   onUpdateZoomPan,
-  onOpenLibrary,
-  onLoadStarterPreset,
   onUnpackComposite,
   isLibraryOpen = false,
 }) => {
@@ -882,43 +878,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             </div>
           );
         })}
-
-        {/* Empty Canvas Guide */}
-        {nodes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center p-6 max-w-sm rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800/80 shadow-lg backdrop-blur-sm space-y-3 pointer-events-auto">
-              <div className="w-10 h-10 mx-auto rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-lg">
-                +
-              </div>
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                  キャンバスは空です
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  上部の「ノードを追加」または「その他の操作」のプリセットからノードを配置してグラフを作成できます。
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {onOpenLibrary && (
-                  <button
-                    onClick={onOpenLibrary}
-                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition shadow-xs"
-                  >
-                    ノードを追加する
-                  </button>
-                )}
-                {onLoadStarterPreset && (
-                  <button
-                    onClick={onLoadStarterPreset}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    完成サンプルを見る
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Floating Wire Hover / Drag Compatibility Tooltip */}

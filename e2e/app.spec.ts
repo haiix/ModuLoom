@@ -8,7 +8,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('空のキャンバスと主要操作を表示する', async ({ page }) => {
-  await expect(page.getByText('キャンバスは空です')).toBeVisible();
+  await expect(page.getByText('キャンバスは空です')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'ノードを追加', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'グラフを実行', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'プロジェクトを保存' })).toBeVisible();
@@ -38,10 +39,9 @@ test('その他の操作メニューは外側のクリックで閉じる', async
 test('ノードライブラリを開いてもはじめてガイドと重ならない', async ({ page }) => {
   await page.getByRole('button', { name: 'その他の操作' }).click();
   await page.getByRole('menuitem', { name: 'はじめてガイドを表示' }).click();
-  await page.getByRole('button', { name: 'ノードを追加', exact: true }).click();
 
   const guide = page.getByRole('complementary', { name: 'はじめてガイド' });
-  const library = page.getByText('ノードライブラリ', { exact: true }).locator('..').locator('..');
+  const library = page.getByRole('complementary', { name: 'ノードライブラリ' });
   await expect(guide).toBeVisible();
   await expect(library).toBeVisible();
 
@@ -55,6 +55,7 @@ test('ノードライブラリを開いてもはじめてガイドと重なら�
 test('選択ノード操作はノードライブラリの開閉状態にかかわらず重ならない', async ({ page }) => {
   await page.getByRole('button', { name: 'その他の操作' }).click();
   await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
   await page.locator('[data-node-id="n-slider-a"] .node-drag-handle').click();
 
   const selectionTools = page.getByRole('toolbar', { name: '選択ノード操作' });
@@ -107,6 +108,7 @@ test('キャンバスは右ドラッグで移動し、中ドラッグでは移�
 test('キャンバスは左ドラッグでノードを範囲選択する', async ({ page }) => {
   await page.getByRole('button', { name: 'その他の操作' }).click();
   await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
 
   const node = page.locator('[data-node-id="n-slider-a"]');
   const nodeBox = await node.boundingBox();
@@ -199,7 +201,8 @@ test('プリセットの適用を元に戻してやり直せる', async ({ page 
   await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
 
   await page.getByRole('button', { name: '元に戻す' }).click();
-  await expect(page.getByText('キャンバスは空です')).toBeVisible();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+  await expect(page.getByText('キャンバスは空です')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'やり直す' }).click();
   await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
