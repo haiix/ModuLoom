@@ -24,6 +24,12 @@ function createProject(overrides: Record<string, unknown> = {}): Record<string, 
   };
 }
 
+describe('project JSON', () => {
+  it('破損したJSONをプロジェクト検証前に拒否する', () => {
+    expect(() => parseFlowProjectJson('{"version":')).toThrowError(/JSON/);
+  });
+});
+
 function createRoundTripProject(): LoadedFlowProject {
   const doubleDefinition: NodeDefinition = {
     typeId: 'custom/double',

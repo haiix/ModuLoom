@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -136,6 +137,22 @@ test('編集内容とviewportを自動保存し、再読み込み時に復元す
   await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
   await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
 
+  const node = page.locator('[data-node-id="n-slider-a"]');
+  const initialNodeTransform = await node.evaluate(
+    (element) => (element as HTMLElement).style.transform,
+  );
+  const nodeHandle = node.locator('.node-drag-handle');
+  const nodeHandleBox = await nodeHandle.boundingBox();
+  expect(nodeHandleBox).not.toBeNull();
+  await page.mouse.move(nodeHandleBox!.x + 30, nodeHandleBox!.y + 15);
+  await page.mouse.down();
+  await page.mouse.move(nodeHandleBox!.x + 110, nodeHandleBox!.y + 60);
+  await page.mouse.up();
+  const savedNodeTransform = await node.evaluate(
+    (element) => (element as HTMLElement).style.transform,
+  );
+  expect(savedNodeTransform).not.toBe(initialNodeTransform);
+
   const canvas = page.getByLabel('ノードキャンバス');
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
@@ -154,6 +171,11 @@ test('編集内容とviewportを自動保存し、再読み込み時に復元す
   await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ノードライブラリを開く' })).toBeVisible();
   await expect(page.getByText('前回の編集状態を復元しました。')).toBeVisible();
+  await expect(page.getByRole('button', { name: '元に戻す' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'やり直す' })).toBeDisabled();
+  await expect
+    .poll(() => node.evaluate((element) => (element as HTMLElement).style.transform))
+    .toBe(savedNodeTransform);
   await expect
     .poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundPosition))
     .toBe(savedPosition);
@@ -165,6 +187,199 @@ test('編集内容とviewportを自動保存し、再読み込み時に復元す
   await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
   await page.reload();
   await expect(page.locator('[data-node-id]')).toHaveCount(0);
+});
+
+test('visibilitychangeとpagehideでデバウンス待ちの編集を直ちに保存する', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await expect(page.getByRole('status')).toContainText('保存中');
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+
+  const node = page.locator('[data-node-id="n-slider-a"]');
+  const handle = node.locator('.node-drag-handle');
+  const box = await handle.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + 20, box!.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 65, box!.y + 40);
+  await page.mouse.up();
+  const savedTransform = await node.evaluate((element) => (element as HTMLElement).style.transform);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+
+  await page.reload();
+  await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
+  await expect
+    .poll(() => node.evaluate((element) => (element as HTMLElement).style.transform))
+    .toBe(savedTransform);
+});
+
+test('ノードライブラリの開閉設定を再読み込み後も維持する', async ({ page }) => {
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('moduloom:node-library-open')))
+    .toBe('false');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを開く' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'ノードライブラリを開く' }).click();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('moduloom:node-library-open')))
+    .toBe('true');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
+});
+
+test('ノードライブラリ設定がない場合はviewportに応じた既定値を使う', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 800 });
+  await page.evaluate(() => localStorage.removeItem('moduloom:node-library-open'));
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを開く' })).toBeVisible();
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => localStorage.removeItem('moduloom:node-library-open'));
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
+});
+
+test('Local Storageが利用できなくてもノードライブラリを操作できる', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: () => {
+        throw new DOMException('storage disabled', 'SecurityError');
+      },
+    });
+  });
+  await page.reload();
+
+  await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
+  await page.getByRole('button', { name: 'ノードライブラリを開く' }).click();
+  await expect(page.getByRole('complementary', { name: 'ノードライブラリ' })).toBeVisible();
+});
+
+test('IndexedDB復元はLocal Storageのノードライブラリ設定を上書きしない', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+
+  await page.evaluate(() => localStorage.setItem('moduloom:node-library-open', 'true'));
+  await page.reload();
+
+  await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを閉じる' })).toBeVisible();
+});
+
+test('IndexedDBが利用できない場合も編集を継続できる', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      get: () => {
+        throw new DOMException('IndexedDB disabled', 'SecurityError');
+      },
+    });
+  });
+  await page.reload();
+
+  await expect(page.getByRole('alert')).toContainText('IndexedDB disabled');
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
+});
+
+test('IndexedDBの容量超過を通知し、後続操作を妨げない', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(IDBObjectStore.prototype, 'put', {
+      configurable: true,
+      value: () => {
+        throw new DOMException('容量不足テスト', 'QuotaExceededError');
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+
+  await expect(page.getByRole('status')).toContainText('自動保存に失敗');
+  await expect(page.getByRole('alert')).toContainText('容量不足テスト');
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
+  await expect(page.getByRole('button', { name: 'ノードライブラリを開く' })).toBeVisible();
+});
+
+test('IndexedDBの書き込み失敗を通知し、次の編集を受け付ける', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(IDBObjectStore.prototype, 'put', {
+      configurable: true,
+      value: () => {
+        throw new Error('書き込み失敗テスト');
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+
+  await expect(page.getByRole('status')).toContainText('自動保存に失敗');
+  await expect(page.getByRole('alert')).toContainText('書き込み失敗テスト');
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+});
+
+test('JSONダウンロードしたプロジェクトを読み込んで既存内容を置き換える', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'プロジェクトを保存' }).click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  if (!downloadPath) throw new Error('ダウンロードファイルのパスを取得できませんでした。');
+
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('string-template');
+  await expect(page.locator('[data-node-id="n-txt-name"]')).toBeVisible();
+
+  await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: 'application/json',
+    buffer: await readFile(downloadPath),
+  });
+  await expect(page.getByText(/正常に解析されました:/)).toBeVisible();
+  await page.getByRole('button', { name: 'キャンバスに復元' }).click();
+  await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
+  await expect(page.locator('[data-node-id="n-txt-name"]')).toHaveCount(0);
+});
+
+test('破損JSONと未対応project versionを部分適用せず拒否する', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
+  const fileInput = page.locator('input[type="file"]');
+
+  await fileInput.setInputFiles({
+    name: 'broken.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"version":'),
+  });
+  await expect(page.getByText('読み込みエラー')).toBeVisible();
+
+  await fileInput.setInputFiles({
+    name: 'future.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ version: '2.0.0', nodes: [], connections: [] })),
+  });
+  await expect(page.getByText(/未対応のバージョン '2\.0\.0'/)).toBeVisible();
+  await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
 });
 
 test('BroadcastChannelなしでも他タブの保存を上書きせず両方の編集を回収できる', async ({ page }) => {

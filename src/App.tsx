@@ -27,6 +27,10 @@ import {
   shouldShowOnboarding,
   STARTER_PRESET_ID,
 } from './components/onboarding';
+import {
+  getInitialNodeLibraryOpen,
+  NODE_LIBRARY_STORAGE_KEY,
+} from './components/browserPreferences';
 import { NodeLibrary } from './components/NodeLibrary';
 import { LoadGraphModal } from './components/LoadGraphModal';
 import { CustomNodeModal } from './components/CustomNodeModal';
@@ -76,26 +80,6 @@ import {
   type Distribution,
   type GraphClipboard,
 } from './engine/graphEditing';
-
-const NODE_LIBRARY_STORAGE_KEY = 'moduloom:node-library-open';
-
-function getInitialLibraryOpen(): boolean {
-  let savedState: string | null = null;
-
-  try {
-    savedState = window.localStorage.getItem(NODE_LIBRARY_STORAGE_KEY);
-  } catch {
-    // Fall back to the viewport-based default when storage is unavailable.
-  }
-
-  if (savedState !== null) return savedState === 'true';
-
-  try {
-    return !window.matchMedia('(max-width: 767px)').matches;
-  } catch {
-    return true;
-  }
-}
 
 interface RecoveryBootstrapState {
   loading: boolean;
@@ -478,7 +462,12 @@ function EditorApp({
   }, []);
 
   // UI Drawer & Modal States
-  const [isLibraryOpen, setIsLibraryOpen] = useState(getInitialLibraryOpen);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(() =>
+    getInitialNodeLibraryOpen(
+      () => window.localStorage.getItem(NODE_LIBRARY_STORAGE_KEY),
+      () => window.matchMedia('(max-width: 767px)').matches,
+    ),
+  );
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isCustomTypeModalOpen, setIsCustomTypeModalOpen] = useState(false);
