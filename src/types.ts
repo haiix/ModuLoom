@@ -24,7 +24,22 @@ export interface Port {
   name: string;
   type: DataType;
   description?: string;
+  /** Whether a value must be supplied by an incoming connection. */
+  required?: boolean;
   defaultValue?: any;
+  /** Documentation-only value; it is never used during evaluation. */
+  exampleValue?: any;
+  constraints?: {
+    integer?: boolean;
+    min?: number;
+    max?: number;
+    nonEmpty?: boolean;
+  };
+}
+
+export interface NodeExecutionMetadata {
+  determinism: 'deterministic' | 'time-dependent' | 'nondeterministic';
+  simulated?: boolean;
 }
 
 export interface CompositeSubgraph {
@@ -59,6 +74,8 @@ export interface NodeDefinition {
     | 'Composite';
   kind: NodeKind;
   description?: string;
+  shortDescription?: string;
+  details?: string;
   inputs: Port[];
   outputs: Port[];
   evaluate: (
@@ -67,6 +84,9 @@ export interface NodeDefinition {
     context?: EvaluationContext,
   ) => Promise<Record<string, any>> | Record<string, any>;
   defaultState?: any;
+  /** State copied into an instance when it is placed on the canvas. */
+  initialState?: any;
+  execution?: NodeExecutionMetadata;
   customCode?: string; // For user-defined custom pure functions
   codegen?: NodeCodegenMetadata;
   isAsync?: boolean;
@@ -128,7 +148,7 @@ export interface GraphPreset {
 }
 
 export interface FlowProjectExport {
-  version: '1.0.0';
+  version: '1.0.0' | '1.1.0';
   appName: string;
   exportedAt: string;
   nodes: NodeInstance[];

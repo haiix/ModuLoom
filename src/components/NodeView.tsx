@@ -187,6 +187,30 @@ export const NodeView: React.FC<NodeViewProps> = ({
               <span>{evaluation.streamCount ?? 0}件</span>
             </span>
           )}
+          {definition.execution?.simulated && (
+            <span
+              className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              title="外部通信を行わないローカルのシミュレーション"
+            >
+              simulation
+            </span>
+          )}
+          {definition.execution?.determinism === 'nondeterministic' && (
+            <span
+              className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-fuchsia-50 dark:bg-fuchsia-950/60 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-200 dark:border-fuchsia-800"
+              title="再評価ごとに結果が変わる場合があります"
+            >
+              non-deterministic
+            </span>
+          )}
+          {definition.execution?.determinism === 'time-dependent' && (
+            <span
+              className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+              title="時間の経過を伴うノード"
+            >
+              time-dependent
+            </span>
+          )}
           {evaluation?.isCached ? (
             <span
               className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200/60 dark:border-slate-700/60"

@@ -340,6 +340,87 @@ export interface UnpackCompositeResult {
   warnings: string[];
 }
 
+function clonePortValue(value: any): any {
+  return value !== null && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : value;
+}
+
+function validatePortValue(port: import('../types').Port, value: any): string | undefined {
+  const valid =
+    port.type === 'any'
+      ? value !== undefined
+      : port.type === 'number'
+        ? typeof value === 'number' && Number.isFinite(value)
+        : port.type === 'string'
+          ? typeof value === 'string'
+          : port.type === 'boolean'
+            ? typeof value === 'boolean'
+            : port.type === 'array'
+              ? Array.isArray(value)
+              : port.type === 'object'
+                ? value !== null && typeof value === 'object' && !Array.isArray(value)
+                : port.type === 'promise'
+                  ? Boolean(value && typeof value.then === 'function')
+                  : port.type === 'stream'
+                    ? Boolean(value && typeof value[Symbol.asyncIterator] === 'function')
+                    : value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!valid) return `INPUT_TYPE: '${port.name}' は ${port.type} 型である必要があります。`;
+  if (port.constraints?.integer && !Number.isInteger(value)) {
+    return `INPUT_CONSTRAINT: '${port.name}' は整数である必要があります。`;
+  }
+  if (port.constraints?.min !== undefined && value < port.constraints.min) {
+    return `INPUT_CONSTRAINT: '${port.name}' は ${port.constraints.min} 以上である必要があります。`;
+  }
+  if (port.constraints?.max !== undefined && value > port.constraints.max) {
+    return `INPUT_CONSTRAINT: '${port.name}' は ${port.constraints.max} 以下である必要があります。`;
+  }
+  if (
+    port.constraints?.nonEmpty &&
+    (value === '' || (Array.isArray(value) && value.length === 0))
+  ) {
+    return `INPUT_CONSTRAINT: '${port.name}' は空にできません。`;
+  }
+  return undefined;
+}
+
+export function resolveNodeInputs(
+  nodeId: string,
+  definition: NodeDefinition,
+  incoming: Map<string, Connection>,
+  results: GraphEvaluation,
+): { inputs: Record<string, any>; error?: string } {
+  const inputs: Record<string, any> = {};
+  for (const port of definition.inputs) {
+    const connection = incoming.get(`${nodeId}:${port.id}`);
+    let value: any;
+    if (connection) {
+      const source = results[connection.fromNodeId];
+      if (source?.error)
+        return { inputs, error: `入力元ノードでエラーが発生しています: ${source.error}` };
+      value =
+        source && connection.fromPortId in source.outputs
+          ? source.outputs[connection.fromPortId]
+          : undefined;
+    }
+    // `defaultValue` wins during the 1.0 compatibility period: old custom definitions and
+    // generated-code parity fixtures can still carry it alongside a newly inferred contract.
+    const required = port.defaultValue === undefined && (port.required ?? true);
+    if (value === undefined) {
+      // A Group Input has a deliberate design-time test value. The outer composite
+      // contract remains required; this exception only evaluates its internal terminal.
+      if (definition.typeId === 'composite/input-port' && port.id === 'in') {
+        inputs[port.id] = undefined;
+        continue;
+      }
+      if (required) return { inputs, error: `INPUT_REQUIRED: '${port.name}' の入力が必要です。` };
+      value = clonePortValue(port.defaultValue);
+    }
+    const validationError = validatePortValue(port, value);
+    if (validationError) return { inputs, error: validationError };
+    inputs[port.id] = value;
+  }
+  return { inputs };
+}
+
 function allocateUniqueId(base: string, occupiedIds: Set<string>): string {
   let candidate = base;
   let suffix = 2;
@@ -537,45 +618,13 @@ export function evaluateGraph(
       continue;
     }
 
-    // Resolve inputs
-    const inputs: Record<string, any> = {};
-    let hasInputError = false;
-    let inputErrorMessage = '';
-
-    for (const port of def.inputs) {
-      const key = `${nodeId}:${port.id}`;
-      const conn = incoming.get(key);
-
-      if (conn) {
-        // Output from source node
-        const sourceResult = result[conn.fromNodeId];
-        if (sourceResult?.error) {
-          hasInputError = true;
-          inputErrorMessage = `入力元ノードでエラーが発生しています: ${sourceResult.error}`;
-          break;
-        }
-        if (sourceResult && conn.fromPortId in sourceResult.outputs) {
-          inputs[port.id] = sourceResult.outputs[conn.fromPortId];
-        } else {
-          inputs[port.id] =
-            port.defaultValue !== null && typeof port.defaultValue === 'object'
-              ? JSON.parse(JSON.stringify(port.defaultValue))
-              : port.defaultValue;
-        }
-      } else {
-        // Unconnected input uses default value (cloned to prevent shared mutations across instances)
-        inputs[port.id] =
-          port.defaultValue !== null && typeof port.defaultValue === 'object'
-            ? JSON.parse(JSON.stringify(port.defaultValue))
-            : port.defaultValue;
-      }
-    }
-
-    if (hasInputError) {
+    const resolved = resolveNodeInputs(nodeId, def, incoming, result);
+    const inputs = resolved.inputs;
+    if (resolved.error) {
       result[nodeId] = {
         inputs,
         outputs: {},
-        error: inputErrorMessage,
+        error: resolved.error,
         isCached: false,
       };
       continue;
@@ -683,43 +732,13 @@ export async function evaluateGraphAsync(
       continue;
     }
 
-    // Resolve inputs from upstream nodes
-    const inputs: Record<string, any> = {};
-    let hasInputError = false;
-    let inputErrorMessage = '';
-
-    for (const port of def.inputs) {
-      const key = `${nodeId}:${port.id}`;
-      const conn = incoming.get(key);
-
-      if (conn) {
-        const sourceResult = result[conn.fromNodeId];
-        if (sourceResult?.error) {
-          hasInputError = true;
-          inputErrorMessage = `入力元ノードでエラーが発生しています: ${sourceResult.error}`;
-          break;
-        }
-        if (sourceResult && conn.fromPortId in sourceResult.outputs) {
-          inputs[port.id] = sourceResult.outputs[conn.fromPortId];
-        } else {
-          inputs[port.id] =
-            port.defaultValue !== null && typeof port.defaultValue === 'object'
-              ? JSON.parse(JSON.stringify(port.defaultValue))
-              : port.defaultValue;
-        }
-      } else {
-        inputs[port.id] =
-          port.defaultValue !== null && typeof port.defaultValue === 'object'
-            ? JSON.parse(JSON.stringify(port.defaultValue))
-            : port.defaultValue;
-      }
-    }
-
-    if (hasInputError) {
+    const resolved = resolveNodeInputs(nodeId, def, incoming, result);
+    const inputs = resolved.inputs;
+    if (resolved.error) {
       result[nodeId] = {
         inputs,
         outputs: {},
-        error: inputErrorMessage,
+        error: resolved.error,
         isCached: false,
       };
       onNodeProgress?.(nodeId, result[nodeId]);
@@ -989,6 +1008,7 @@ export function generateTypeScriptCode(
   ts += `}\n\n`;
 
   ts += `export ${hasAsyncOrStream ? 'async ' : ''}function evaluatePipeline(inputs: PipelineInputs = {}) {\n`;
+  ts += `  const requiredInput = (name: string): never => { throw new Error(\`INPUT_REQUIRED: '\${name}' の入力が必要です。\`); };\n`;
   for (const nodeId of order) {
     const node = nodeMap.get(nodeId)!;
     const definition = definitionMap.get(nodeId)!;
@@ -1001,7 +1021,11 @@ export function generateTypeScriptCode(
       const connection = incoming.get(`${nodeId}:${port.id}`);
       const value = connection
         ? `${nodeVariables.get(connection.fromNodeId)!}[${JSON.stringify(connection.fromPortId)}]`
-        : serializeValue(port.defaultValue);
+        : definition.typeId === 'composite/input-port' && port.id === 'in'
+          ? 'undefined'
+          : port.defaultValue === undefined && port.required !== false
+            ? `requiredInput(${JSON.stringify(port.name)})`
+            : serializeValue(port.defaultValue);
       ts += `    ${JSON.stringify(port.id)}: ${value},\n`;
     }
     ts += `  };\n`;

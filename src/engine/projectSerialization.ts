@@ -44,7 +44,10 @@ function serializePort(port: Port): Port {
     name: port.name,
     type: port.type,
     ...(port.description !== undefined ? { description: port.description } : {}),
+    ...(port.required !== undefined ? { required: port.required } : {}),
     ...(port.defaultValue !== undefined ? { defaultValue: port.defaultValue } : {}),
+    ...(port.exampleValue !== undefined ? { exampleValue: port.exampleValue } : {}),
+    ...(port.constraints !== undefined ? { constraints: port.constraints } : {}),
   };
 }
 
@@ -91,9 +94,15 @@ function serializeDefinition(definition: NodeDefinition): SerializedNodeDefiniti
     category: definition.category,
     kind: definition.kind,
     ...(definition.description !== undefined ? { description: definition.description } : {}),
+    ...(definition.shortDescription !== undefined
+      ? { shortDescription: definition.shortDescription }
+      : {}),
+    ...(definition.details !== undefined ? { details: definition.details } : {}),
     inputs: definition.inputs.map(serializePort),
     outputs: definition.outputs.map(serializePort),
     ...(definition.defaultState !== undefined ? { defaultState: definition.defaultState } : {}),
+    ...(definition.initialState !== undefined ? { initialState: definition.initialState } : {}),
+    ...(definition.execution !== undefined ? { execution: definition.execution } : {}),
     ...(definition.customCode !== undefined ? { customCode: definition.customCode } : {}),
     ...(definition.isAsync !== undefined ? { isAsync: definition.isAsync } : {}),
     ...(definition.isComposite !== undefined ? { isComposite: definition.isComposite } : {}),

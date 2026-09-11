@@ -15,10 +15,12 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     description: '数値を入力するソースノード',
     inputs: [],
     outputs: [{ id: 'value', name: 'value', type: 'number', defaultValue: 0 }],
-    defaultState: { value: 10 },
+    defaultState: { value: 0 },
     evaluate: (_inputs, state) => {
-      const val = Number(state?.value ?? 0);
-      return { value: isNaN(val) ? 0 : val };
+      if (typeof state?.value !== 'number' || !Number.isFinite(state.value)) {
+        throw new Error('INPUT_TYPE: 数値を入力してください。');
+      }
+      return { value: state.value };
     },
   },
   {
@@ -31,8 +33,19 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     outputs: [{ id: 'value', name: 'value', type: 'number', defaultValue: 50 }],
     defaultState: { value: 50, min: 0, max: 100, step: 1 },
     evaluate: (_inputs, state) => {
-      const val = Number(state?.value ?? 50);
-      return { value: isNaN(val) ? 50 : val };
+      const { value, min, max, step } = state ?? {};
+      if (
+        ![value, min, max, step].every(
+          (item) => typeof item === 'number' && Number.isFinite(item),
+        ) ||
+        min > max ||
+        step <= 0 ||
+        value < min ||
+        value > max
+      ) {
+        throw new Error('INPUT_CONSTRAINT: スライダーの範囲または値が不正です。');
+      }
+      return { value };
     },
   },
   {
@@ -43,9 +56,11 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     description: '文字列を入力するソースノード',
     inputs: [],
     outputs: [{ id: 'value', name: 'value', type: 'string', defaultValue: 'Hello World' }],
-    defaultState: { value: 'Hello ModuLoom' },
+    defaultState: { value: '' },
     evaluate: (_inputs, state) => {
-      return { value: String(state?.value ?? '') };
+      if (typeof state?.value !== 'string')
+        throw new Error('INPUT_TYPE: 文字列を入力してください。');
+      return { value: state.value };
     },
   },
   {
@@ -56,9 +71,11 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     description: '真偽値（true / false）を切り替えるノード',
     inputs: [],
     outputs: [{ id: 'value', name: 'value', type: 'boolean', defaultValue: true }],
-    defaultState: { value: true },
+    defaultState: { value: false },
     evaluate: (_inputs, state) => {
-      return { value: Boolean(state?.value) };
+      if (typeof state?.value !== 'boolean')
+        throw new Error('INPUT_TYPE: booleanを入力してください。');
+      return { value: state.value };
     },
   },
   {
@@ -69,7 +86,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     description: '数値または文字の配列リテラルを入力するノード',
     inputs: [],
     outputs: [{ id: 'value', name: 'value', type: 'array', defaultValue: [1, 2, 3, 4, 5] }],
-    defaultState: { rawText: '10, 20, 30, 40, 50', type: 'number' },
+    defaultState: { rawText: '', type: 'number' },
     evaluate: (_inputs, state) => {
       const raw = String(state?.rawText ?? '');
       if (state?.type === 'string') {
@@ -81,8 +98,11 @@ export const BUILTIN_NODES: NodeDefinition[] = [
       }
       const arr = raw
         .split(',')
-        .map((s) => Number(s.trim()))
-        .filter((n) => !isNaN(n));
+        .filter((s) => s.trim() !== '')
+        .map((s) => Number(s.trim()));
+      if (arr.some((n) => !Number.isFinite(n))) {
+        throw new Error('INPUT_TYPE: 数値CSVに変換できない要素があります。');
+      }
       return { value: arr };
     },
   },
@@ -96,13 +116,19 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     outputs: [
       { id: 'value', name: 'value', type: 'object', defaultValue: { id: 1, name: 'Sample' } },
     ],
-    defaultState: { rawJson: '{\n  "name": "ModuLoom",\n  "version": 1.0,\n  "pure": true\n}' },
+    defaultState: { rawJson: '{}' },
     evaluate: (_inputs, state) => {
       try {
         const parsed = JSON.parse(state?.rawJson || '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('JSONオブジェクトを入力してください。');
+        }
         return { value: parsed };
-      } catch {
-        return { value: {} };
+      } catch (error) {
+        throw new Error(
+          `INPUT_TYPE: ${error instanceof Error ? error.message : 'JSONが不正です。'}`,
+          { cause: error },
+        );
       }
     },
   },
@@ -173,8 +199,8 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
-      const a = Number(inputs.a ?? 0);
-      const b = Number(inputs.b ?? 1);
+      const a = inputs.a;
+      const b = inputs.b;
       if (b === 0) {
         throw new Error('ゼロ除算エラー (Division by zero)');
       }
@@ -193,8 +219,9 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
-      const a = Number(inputs.a ?? 0);
-      const b = Number(inputs.b ?? 1);
+      const a = inputs.a;
+      const b = inputs.b;
+      if (b === 0) throw new Error('DOMAIN_ERROR: ゼロ除算エラー (Modulo by zero)');
       return { result: a % b };
     },
   },
@@ -231,7 +258,8 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     inputs: [{ id: 'value', name: 'value', type: 'number', defaultValue: 0 }],
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
-      return { result: Math.sqrt(Number(inputs.value ?? 0)) };
+      if (inputs.value < 0) throw new Error('DOMAIN_ERROR: 負数の平方根は計算できません。');
+      return { result: Math.sqrt(inputs.value) };
     },
   },
 
@@ -428,7 +456,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'result', name: 'result', type: 'array' }],
     evaluate: (inputs) => {
-      return { result: [inputs.item1, inputs.item2].filter((x) => x !== undefined) };
+      return { result: [inputs.item1, inputs.item2] };
     },
   },
   {
@@ -484,7 +512,8 @@ export const BUILTIN_NODES: NodeDefinition[] = [
             case '-':
               return x - factor;
             case '/':
-              return factor !== 0 ? x / factor : x;
+              if (factor === 0) throw new Error('DOMAIN_ERROR: Array Mapの除数は0にできません。');
+              return x / factor;
             case '*':
             default:
               return x * factor;
@@ -519,8 +548,10 @@ export const BUILTIN_NODES: NodeDefinition[] = [
               return x < thresh;
             case '<=':
               return x <= thresh;
+            case '===':
             case '==':
               return x === thresh;
+            case '!==':
             case '!=':
               return x !== thresh;
             case '>':
@@ -573,7 +604,10 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
       const arr = Array.isArray(inputs.arr) ? inputs.arr : [];
-      const sum = arr.reduce((acc, curr) => acc + (typeof curr === 'number' ? curr : 0), 0);
+      if (arr.some((item) => typeof item !== 'number' || !Number.isFinite(item))) {
+        throw new Error('INPUT_TYPE: Array Sumには有限数だけを含む配列が必要です。');
+      }
+      const sum = arr.reduce((acc, curr) => acc + curr, 0);
       return { result: sum };
     },
   },
@@ -593,7 +627,10 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'result', name: 'result', type: 'object' }],
     evaluate: (inputs) => {
-      const key = String(inputs.key ?? 'key');
+      const key = inputs.key;
+      if (!key || ['__proto__', 'prototype', 'constructor'].includes(key)) {
+        throw new Error('INPUT_CONSTRAINT: 使用できないオブジェクトキーです。');
+      }
       return { result: { [key]: inputs.value } };
     },
   },
@@ -609,7 +646,10 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'result', name: 'result', type: 'any' }],
     evaluate: (inputs) => {
-      const obj = inputs.obj && typeof inputs.obj === 'object' ? inputs.obj : {};
+      const obj = inputs.obj;
+      if (!Object.prototype.hasOwnProperty.call(obj, inputs.key)) {
+        throw new Error(`DOMAIN_ERROR: プロパティ '${inputs.key}' が存在しません。`);
+      }
       return { result: obj[inputs.key] };
     },
   },
@@ -625,7 +665,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
       try {
         return { result: JSON.stringify(inputs.data, null, 2) };
       } catch {
-        return { result: '' };
+        throw new Error('DOMAIN_ERROR: JSONへ直列化できません。');
       }
     },
   },
@@ -673,10 +713,10 @@ export const BUILTIN_NODES: NodeDefinition[] = [
   },
   {
     typeId: 'output/log',
-    label: 'Console Log Viewer',
+    label: 'Log Viewer',
     category: 'Output',
     kind: 'output',
-    description: 'テキストや結果の履歴ログを表示',
+    description: '現在の値をログ形式で表示',
     inputs: [{ id: 'message', name: 'message', type: 'any' }],
     outputs: [],
     evaluate: (inputs) => {
@@ -695,7 +735,7 @@ export const BUILTIN_NODES: NodeDefinition[] = [
       '複合ノード（関数グループ）の入力引数端子。ポート名や型を設定して下流ノードへ値を供給します。',
     inputs: [{ id: 'in', name: 'in', type: 'any' }],
     outputs: [{ id: 'out', name: 'out', type: 'any', defaultValue: 0 }],
-    defaultState: { portName: 'x', portType: 'number', testValue: 10 },
+    defaultState: { portName: 'x', portType: 'number', testValue: 0 },
     evaluate: (inputs, state) => {
       let val = inputs.in !== undefined ? inputs.in : state?.testValue;
       if (val === undefined) {
@@ -727,7 +767,63 @@ export const BUILTIN_NODES: NodeDefinition[] = [
   },
 ];
 
+const OPTIONAL_INPUTS = new Set([
+  'string/split:separator',
+  'array/join:separator',
+  'array/map:factor',
+  'array/filter:threshold',
+  'array/slice:start',
+  'async/delay:delayMs',
+  'async/fetch:latency',
+  'stream/interval:intervalMs',
+  'stream/interval:limit',
+  'stream/from_array:delayMs',
+  'stream/map:multiplier',
+  'stream/filter:threshold',
+  'stream/take:count',
+]);
+
+const BUILTIN_LABELS: Record<string, string> = {
+  'logic/equal': 'Strict Equal (===)',
+  'input/boolean': 'Boolean Input',
+  'array/create': 'Combine Items',
+  'array/map': 'Map Numbers',
+  'array/filter': 'Filter Numbers',
+  'array/sum': 'Sum Numbers',
+  'object/create': 'Create Entry',
+  'async/delay': 'Delay',
+  'async/resolve': 'Resolve Promise',
+  'async/all': 'Wait for All',
+  'async/fetch': 'Simulated API Response',
+  'stream/from_array': 'Array Stream',
+  'stream/map': 'Map Stream',
+  'stream/filter': 'Filter Stream',
+  'stream/take': 'Take Stream',
+  'stream/collect': 'Collect Stream',
+  'composite/input-port': 'Group Input',
+  'composite/output-port': 'Group Output',
+};
+
 for (const definition of BUILTIN_NODES) {
+  definition.label =
+    BUILTIN_LABELS[definition.typeId] ?? definition.label.replace(/ \([^)]*\)/, '');
+  definition.initialState = definition.defaultState;
+  definition.inputs = definition.inputs.map((port) => {
+    const optional = OPTIONAL_INPUTS.has(`${definition.typeId}:${port.id}`);
+    return {
+      ...port,
+      ...(optional ? { required: false } : { required: true }),
+      ...(!optional ? { defaultValue: undefined } : {}),
+    };
+  });
+  definition.outputs = definition.outputs.map(({ defaultValue: _defaultValue, ...port }) => port);
+  if (definition.typeId === 'async/fetch') {
+    definition.execution = { determinism: 'nondeterministic', simulated: true };
+  } else if (definition.typeId === 'stream/interval' || definition.typeId === 'stream/from_array') {
+    definition.execution = { determinism: 'time-dependent' };
+  } else {
+    definition.execution = { determinism: 'deterministic' };
+  }
   const codegen = BUILTIN_NODE_CODEGEN[definition.typeId];
   if (!codegen) throw new Error(`Missing code generation metadata for ${definition.typeId}`);
   definition.codegen = codegen;
