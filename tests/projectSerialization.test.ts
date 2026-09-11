@@ -47,6 +47,7 @@ describe('project serialization', () => {
     const snapshot = createRecoverySnapshot(project, {
       updatedAt: '2026-09-10T00:01:00.000Z',
       revision: 3,
+      writerId: 'tab-a',
       wasDirty: true,
     });
     const restored = parseRecoverySnapshot(JSON.parse(JSON.stringify(snapshot)));
@@ -81,12 +82,32 @@ describe('project serialization', () => {
     const snapshot = createRecoverySnapshot(project, {
       updatedAt: '2026-09-10T00:01:00.000Z',
       revision: 0,
+      writerId: 'tab-a',
       wasDirty: false,
     });
 
-    expect(CURRENT_RECOVERY_STORAGE_VERSION).toBe(1);
-    expect(() => parseRecoverySnapshot({ ...snapshot, storageVersion: 2 })).toThrowError(
-      /snapshot\.storageVersion: 未対応のバージョン '2'.*'1'/,
+    expect(CURRENT_RECOVERY_STORAGE_VERSION).toBe(2);
+    expect(() => parseRecoverySnapshot({ ...snapshot, storageVersion: 3 })).toThrowError(
+      /snapshot\.storageVersion: 未対応のバージョン '3'.*'2'/,
     );
+  });
+
+  it('旧storageVersion 1を読み込み専用writerId付きの現行形式へ移行する', () => {
+    const project = serializeFlowProject({
+      document: createDocument(),
+      viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+      exportedAt: '2026-09-10T00:00:00.000Z',
+    });
+
+    const restored = parseRecoverySnapshot({
+      storageVersion: 1,
+      project,
+      updatedAt: '2026-09-10T00:01:00.000Z',
+      revision: 2,
+      wasDirty: true,
+    });
+
+    expect(restored.storageVersion).toBe(2);
+    expect(restored.writerId).toBe('legacy-recovery-snapshot');
   });
 });

@@ -43,6 +43,7 @@ import {
   discardRecoverySnapshot,
   InvalidRecoverySnapshotError,
   loadRecoverySnapshot,
+  RecoveryConflictError,
   saveRecoverySnapshot,
 } from './engine/recoveryStorage';
 import {
@@ -185,7 +186,10 @@ export default function App() {
         viewport: snapshot.project.viewport ?? { zoom: 1, pan: { x: 60, y: 80 } },
         exportedAt: snapshot.project.exportedAt,
       });
-      await saveRecoverySnapshot({ ...snapshot, project, trustedCodeFingerprint });
+      await saveRecoverySnapshot(
+        { ...snapshot, project, trustedCodeFingerprint },
+        snapshot.revision,
+      );
       setRecovery({
         loading: false,
         snapshot: { ...snapshot, trustedCodeFingerprint },
@@ -253,6 +257,37 @@ interface RecoverySaveInput {
   document: EditorDocument;
   viewport: { zoom: number; pan: { x: number; y: number } };
   wasDirty: boolean;
+}
+
+interface RecoveryUpdateMessage {
+  type: 'snapshot-saved';
+  writerId: string;
+  revision: number;
+  updatedAt: string;
+}
+
+interface AutosaveConflict {
+  revision: number;
+  updatedAt: string;
+}
+
+const RECOVERY_CHANNEL_NAME = 'moduloom-recovery-updates';
+
+function createRecoveryWriterId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const randomPart = crypto.getRandomValues(new Uint32Array(2)).join('-');
+  return `${Date.now()}-${randomPart}`;
+}
+
+function isRecoveryUpdateMessage(value: unknown): value is RecoveryUpdateMessage {
+  if (!value || typeof value !== 'object') return false;
+  const message = value as Partial<RecoveryUpdateMessage>;
+  return (
+    message.type === 'snapshot-saved' &&
+    typeof message.writerId === 'string' &&
+    Number.isSafeInteger(message.revision) &&
+    typeof message.updatedAt === 'string'
+  );
 }
 
 interface EditorAppProps {
@@ -327,52 +362,106 @@ function EditorApp({
   const [browserSaveStatus, setBrowserSaveStatus] = useState<DebouncedSaveStatus>(
     initialSnapshot ? 'saved' : 'idle',
   );
+  const [autosaveConflict, setAutosaveConflict] = useState<AutosaveConflict | null>(null);
   const [showRecoveryNotice, setShowRecoveryNotice] = useState(Boolean(initialSnapshot));
-  const revisionRef = useRef(initialSnapshot?.revision ?? 0);
-  const initialAutosaveRenderRef = useRef(true);
+  const writerIdRef = useRef(createRecoveryWriterId());
+  const revisionRef = useRef<number | null>(initialSnapshot?.revision ?? null);
+  const recoveryChannelRef = useRef<BroadcastChannel | null>(null);
+  const lastAutosaveInputRef = useRef<RecoverySaveInput>({
+    document: editorHistory.present,
+    viewport: { zoom, pan },
+    wasDirty: isDirty,
+  });
   const saveSchedulerRef = useRef<DebouncedSave<RecoverySaveInput> | null>(null);
+  const enterAutosaveConflict = useCallback((conflict: AutosaveConflict) => {
+    saveSchedulerRef.current?.dispose();
+    setAutosaveConflict(conflict);
+    setAutosaveError(null);
+    setBrowserSaveStatus('error');
+  }, []);
   if (saveSchedulerRef.current === null) {
     saveSchedulerRef.current = new DebouncedSave(
       async ({ document, viewport, wasDirty }) => {
         const now = new Date().toISOString();
         const project = serializeFlowProject({ document, viewport, exportedAt: now });
         const trustedCodeFingerprint = await createProjectCodeFingerprint(project);
-        const revision = revisionRef.current + 1;
+        const expectedRevision = revisionRef.current;
+        const revision = (expectedRevision ?? 0) + 1;
+        const writerId = writerIdRef.current;
         await saveRecoverySnapshot(
           createRecoverySnapshot(project, {
             updatedAt: now,
             revision,
+            writerId,
             wasDirty,
             ...(trustedCodeFingerprint ? { trustedCodeFingerprint } : {}),
           }),
+          expectedRevision,
         );
         revisionRef.current = revision;
+        recoveryChannelRef.current?.postMessage({
+          type: 'snapshot-saved',
+          writerId,
+          revision,
+          updatedAt: now,
+        } satisfies RecoveryUpdateMessage);
         setAutosaveError(null);
       },
       {
         delayMs: 400,
         maxWaitMs: 2_000,
-        onError: (error) =>
+        onError: (error) => {
+          if (error instanceof RecoveryConflictError) {
+            enterAutosaveConflict({
+              revision: error.currentSnapshot.revision,
+              updatedAt: error.currentSnapshot.updatedAt,
+            });
+            return;
+          }
           setAutosaveError(
             error instanceof Error ? error.message : 'プロジェクトを自動保存できませんでした。',
-          ),
+          );
+        },
         onStatusChange: setBrowserSaveStatus,
       },
     );
   }
 
   useEffect(() => {
-    if (initialAutosaveRenderRef.current) {
-      initialAutosaveRenderRef.current = false;
-      return;
-    }
-    if (!autosaveEnabled) return;
-    saveSchedulerRef.current?.schedule({
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(RECOVERY_CHANNEL_NAME);
+    recoveryChannelRef.current = channel;
+    channel.onmessage = ({ data }: MessageEvent<unknown>) => {
+      if (!isRecoveryUpdateMessage(data) || data.writerId === writerIdRef.current) return;
+      if (data.revision <= (revisionRef.current ?? -1)) return;
+      enterAutosaveConflict({ revision: data.revision, updatedAt: data.updatedAt });
+    };
+    return () => {
+      recoveryChannelRef.current = null;
+      channel.close();
+    };
+  }, [enterAutosaveConflict]);
+
+  useEffect(() => {
+    if (!autosaveEnabled || autosaveConflict) return;
+    const nextInput: RecoverySaveInput = {
       document: editorHistory.present,
       viewport: { zoom, pan },
       wasDirty: isDirty,
-    });
-  }, [autosaveEnabled, editorHistory.present, isDirty, pan, zoom]);
+    };
+    const previousInput = lastAutosaveInputRef.current;
+    if (
+      previousInput.document === nextInput.document &&
+      previousInput.viewport.zoom === nextInput.viewport.zoom &&
+      previousInput.viewport.pan.x === nextInput.viewport.pan.x &&
+      previousInput.viewport.pan.y === nextInput.viewport.pan.y &&
+      previousInput.wasDirty === nextInput.wasDirty
+    ) {
+      return;
+    }
+    lastAutosaveInputRef.current = nextInput;
+    saveSchedulerRef.current?.schedule(nextInput);
+  }, [autosaveConflict, autosaveEnabled, editorHistory.present, isDirty, pan, zoom]);
 
   useEffect(() => {
     const flushPendingSave = () => void saveSchedulerRef.current?.flush();
@@ -818,19 +907,9 @@ function EditorApp({
     setEvalStats({ dirtyCount: 0, totalCount: 0, lastDirtyNodeIds: [] });
   };
 
-  const handleDiscardRestoredWork = async () => {
+  const handleDiscardRestoredWork = () => {
     if (!window.confirm('復元した内容を破棄して新しいプロジェクトを開始しますか？')) return;
-    await saveSchedulerRef.current?.flush();
     saveSchedulerRef.current?.dispose();
-    try {
-      await discardRecoverySnapshot();
-    } catch (error) {
-      setAutosaveError(
-        error instanceof Error ? error.message : '復元データを破棄できませんでした。',
-      );
-      setBrowserSaveStatus('error');
-      return;
-    }
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
     setEditorHistory(
       createEditorHistory({
@@ -1476,7 +1555,7 @@ function EditorApp({
           <button
             type="button"
             className="rounded border border-emerald-500 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-            onClick={() => void handleDiscardRestoredWork()}
+            onClick={handleDiscardRestoredWork}
           >
             破棄して新規作成
           </button>
@@ -1489,6 +1568,38 @@ function EditorApp({
             ×
           </button>
         </aside>
+      )}
+
+      {autosaveConflict && (
+        <div
+          role="alert"
+          className="fixed right-4 top-16 z-50 max-w-md rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-xs text-red-950 shadow-lg dark:border-red-800 dark:bg-red-950 dark:text-red-100"
+        >
+          <p className="font-semibold">別のタブで新しい編集が保存されました。</p>
+          <p className="mt-1">
+            このタブの自動保存を停止しています。現在の内容をJSONで退避してから、保存済みの
+            状態を再読み込みしてください。
+          </p>
+          <p className="mt-1 text-[11px] opacity-80">
+            検出したrevision: {autosaveConflict.revision}（{autosaveConflict.updatedAt}）
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              className="rounded bg-slate-800 px-2 py-1 font-semibold text-white dark:bg-slate-200 dark:text-slate-900"
+              onClick={handleExportJson}
+            >
+              現在の内容をJSON書き出し
+            </button>
+            <button
+              type="button"
+              className="rounded bg-red-700 px-2 py-1 font-semibold text-white"
+              onClick={() => window.location.reload()}
+            >
+              保存済み状態を再読み込み
+            </button>
+          </div>
+        </div>
       )}
 
       {(recoveryWarning || autosaveError) && (

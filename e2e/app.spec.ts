@@ -167,6 +167,49 @@ test('編集内容とviewportを自動保存し、再読み込み時に復元す
   await expect(page.locator('[data-node-id]')).toHaveCount(0);
 });
 
+test('BroadcastChannelなしでも他タブの保存を上書きせず両方の編集を回収できる', async ({ page }) => {
+  const otherPage = await page.context().newPage();
+  await otherPage.addInitScript(() => {
+    Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined });
+  });
+  await otherPage.goto('/');
+
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+
+  await otherPage.getByRole('button', { name: 'その他の操作' }).click();
+  await otherPage
+    .getByRole('combobox', { name: 'プリセットを選択' })
+    .selectOption('string-template');
+  const conflict = otherPage.getByRole('alert');
+  await expect(conflict).toContainText('別のタブで新しい編集が保存されました。');
+  await expect(otherPage.locator('[data-node-id="n-txt-name"]')).toBeVisible();
+
+  const downloadPromise = otherPage.waitForEvent('download');
+  await otherPage.getByRole('button', { name: '現在の内容をJSON書き出し' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^moduloom-graph-.*\.json$/);
+
+  otherPage.once('dialog', (dialog) => void dialog.accept());
+  await otherPage.getByRole('button', { name: '保存済み状態を再読み込み' }).click();
+  await expect(otherPage.locator('[data-node-id="n-slider-a"]')).toBeVisible();
+  await expect(otherPage.locator('[data-node-id="n-txt-name"]')).toHaveCount(0);
+});
+
+test('BroadcastChannelで他タブの更新を編集前に通知する', async ({ page }) => {
+  const otherPage = await page.context().newPage();
+  await otherPage.goto('/');
+
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+
+  await expect(otherPage.getByRole('alert')).toContainText(
+    '別のタブで新しい編集が保存されました。',
+  );
+});
+
 test('全消去を確定すると古いグラフを次回復元しない', async ({ page }) => {
   await page.getByRole('button', { name: 'その他の操作' }).click();
   await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
