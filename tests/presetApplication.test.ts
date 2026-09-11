@@ -66,4 +66,23 @@ describe('preset application', () => {
       }),
     ).toThrow('User');
   });
+
+  it.each([
+    ['custom-type-pipeline', 'User'],
+    ['composite-vector-length', 'Point2D'],
+  ])('reuses and upgrades a legacy %s dependency without catalog metadata', (presetId, typeId) => {
+    const preset = PRESETS.find(({ id }) => id === presetId)!;
+    const dependency = preset.dependencies!.customTypes!.find(({ id }) => id === typeId)!;
+    const { catalogSource: _catalogSource, ...legacyDependency } = dependency;
+
+    const result = insertPreset({ ...emptyDocument(), customTypes: [legacyDependency] }, preset, {
+      idPrefix: `legacy-${typeId}`,
+      x: 0,
+      y: 0,
+    });
+
+    expect(result.customTypes).toHaveLength(1);
+    expect(result.customTypes[0]).toEqual(dependency);
+    expect(result.nodes).toHaveLength(preset.nodes.length);
+  });
 });

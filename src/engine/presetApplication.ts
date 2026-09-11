@@ -23,6 +23,11 @@ function serializableDefinition(definition: NodeDefinition) {
   return serializable;
 }
 
+function semanticCustomType(customType: CustomTypeDefinition) {
+  const { catalogSource: _catalogSource, ...semantic } = customType;
+  return semantic;
+}
+
 function sameValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -109,7 +114,12 @@ export function insertPreset(
     document.customTypes,
     dependencies.customTypes,
     (type: CustomTypeDefinition) => type.id,
-  );
+    semanticCustomType,
+  ).map((existing) => {
+    const required = dependencies.customTypes.find(({ id }) => id === existing.id);
+    if (!required?.catalogSource || existing.catalogSource) return existing;
+    return { ...existing, catalogSource: required.catalogSource };
+  });
   const customDefinitions = mergeDependencies(
     document.customDefinitions,
     dependencies.customDefinitions,
