@@ -62,11 +62,8 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     inputs: [{ id: 'promise', name: 'promise', type: 'promise' }],
     outputs: [{ id: 'result', name: 'result', type: 'any' }],
     evaluate: async (inputs) => {
-      if (inputs.promise && typeof inputs.promise.then === 'function') {
-        const resolved = await inputs.promise;
-        return { result: resolved };
-      }
-      return { result: inputs.promise };
+      if (!isPromise(inputs.promise)) throw new Error('INPUT_TYPE: Promise入力が必要です。');
+      return { result: await inputs.promise };
     },
   },
   {
@@ -82,8 +79,11 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'results', name: 'results', type: 'array' }],
     evaluate: async (inputs) => {
-      const p1 = isPromise(inputs.p1) ? inputs.p1 : Promise.resolve(inputs.p1);
-      const p2 = isPromise(inputs.p2) ? inputs.p2 : Promise.resolve(inputs.p2);
+      if (!isPromise(inputs.p1) || !isPromise(inputs.p2)) {
+        throw new Error('INPUT_TYPE: Promise入力が必要です。');
+      }
+      const p1 = inputs.p1;
+      const p2 = inputs.p2;
       const results = await Promise.all([p1, p2]);
       return { results };
     },
@@ -105,7 +105,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'promise', name: 'promise', type: 'promise' },
     ],
     evaluate: async (inputs) => {
-      const ms = Math.max(30, Number(inputs.latency ?? 500));
+      const ms = inputs.latency;
       await new Promise((r) => setTimeout(r, ms));
       const payload = {
         endpoint: inputs.endpoint || '/api/v1/metrics',
@@ -177,10 +177,8 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     evaluate: (inputs) => {
-      if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
-        return { stream: createIntervalStream(400, 5) };
-      }
-      const mult = Number(inputs.multiplier ?? 2);
+      if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
+      const mult = inputs.multiplier;
       return {
         stream: mapStream(inputs.stream, (val) => (typeof val === 'number' ? val * mult : val)),
       };
@@ -200,9 +198,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     defaultState: { mode: 'even' },
     evaluate: (inputs, state) => {
-      if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
-        return { stream: createIntervalStream(400, 5) };
-      }
+      if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
       const mode = state?.mode || 'even';
       const thresh = Number(inputs.threshold ?? 0);
       return {
@@ -235,10 +231,8 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     ],
     outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
     evaluate: (inputs) => {
-      if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
-        return { stream: createIntervalStream(400, 5) };
-      }
-      const count = Math.max(1, Number(inputs.count ?? 4));
+      if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
+      const count = inputs.count;
       return {
         stream: takeStream(inputs.stream, count),
       };
@@ -257,9 +251,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'count', name: 'count', type: 'number' },
     ],
     evaluate: async (inputs) => {
-      if (!inputs.stream || !isAsyncIterable(inputs.stream)) {
-        return { array: [], count: 0 };
-      }
+      if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
       const collected = await collectStream(inputs.stream, undefined, 50);
       return {
         array: collected,

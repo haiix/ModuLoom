@@ -43,6 +43,26 @@ const definitions = new Map<string, NodeDefinition>([
 ]);
 
 describe('DAG execution debugger', () => {
+  it('通常評価と同様に未接続の必須入力をエラーにする', async () => {
+    const requiredNode: NodeDefinition = {
+      typeId: 'required',
+      label: 'Required',
+      category: 'Math',
+      kind: 'pure',
+      inputs: [{ id: 'value', name: 'value', type: 'number', required: true }],
+      outputs: [{ id: 'result', name: 'result', type: 'number' }],
+      evaluate: (inputs) => ({ result: inputs.value }),
+    };
+    const session = new DagExecutionDebugger(
+      [{ id: 'required', typeId: requiredNode.typeId, x: 0, y: 0 }],
+      [],
+      new Map([[requiredNode.typeId, requiredNode]]),
+    );
+
+    await session.step();
+    expect(session.getSnapshot().traces.required.error).toContain('INPUT_REQUIRED');
+  });
+
   it('starts paused before a node and executes exactly one node per step', async () => {
     const session = new DagExecutionDebugger(nodes, connections, definitions);
 

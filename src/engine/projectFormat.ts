@@ -13,7 +13,7 @@ import { getTopologicalOrder } from './dagEngine';
 import { createCustomNodeEvaluator, validateCustomCode } from './customCodeRunner';
 import { isTypeCompatible } from './typeSystem';
 
-export const CURRENT_PROJECT_VERSION = '1.0.0' as const;
+export const CURRENT_PROJECT_VERSION = '1.1.0' as const;
 
 const DEFAULT_VIEWPORT = { zoom: 1, pan: { x: 60, y: 80 } };
 const BUILTIN_DATA_TYPES = new Set([
@@ -98,12 +98,34 @@ function optionalBoolean(value: unknown, path: string): boolean | undefined {
 
 function parsePort(value: unknown, path: string): Port {
   const port = expectRecord(value, path);
+  const required = optionalBoolean(port.required, `${path}.required`);
+  const hasDefault = port.defaultValue !== undefined;
+  if (required === true && hasDefault) {
+    fail(path, '必須入力に defaultValue は設定できません。');
+  }
+  if (required === false && !hasDefault) {
+    fail(path, '任意入力には defaultValue が必要です。');
+  }
+  const constraints =
+    port.constraints === undefined
+      ? undefined
+      : expectRecord(port.constraints, `${path}.constraints`);
+  if (constraints?.integer !== undefined && typeof constraints.integer !== 'boolean') {
+    fail(`${path}.constraints.integer`, 'boolean である必要があります。');
+  }
+  for (const key of ['min', 'max'] as const) {
+    if (constraints?.[key] !== undefined)
+      expectFiniteNumber(constraints[key], `${path}.constraints.${key}`);
+  }
   return {
     id: expectString(port.id, `${path}.id`),
     name: expectString(port.name, `${path}.name`),
     type: expectString(port.type, `${path}.type`),
     description: optionalText(port.description, `${path}.description`),
+    ...(required !== undefined ? { required } : {}),
     ...(port.defaultValue !== undefined ? { defaultValue: port.defaultValue } : {}),
+    ...(port.exampleValue !== undefined ? { exampleValue: port.exampleValue } : {}),
+    ...(constraints !== undefined ? { constraints } : {}),
   };
 }
 
@@ -279,10 +301,35 @@ function parseCustomDefinition(value: unknown, path: string): NodeDefinition {
     category: category as NodeDefinition['category'],
     kind: kind as NodeDefinition['kind'],
     description: optionalText(definition.description, `${path}.description`),
+    shortDescription: optionalText(definition.shortDescription, `${path}.shortDescription`),
+    details: optionalText(definition.details, `${path}.details`),
     inputs,
     outputs,
     evaluate,
     ...(definition.defaultState !== undefined ? { defaultState: definition.defaultState } : {}),
+    ...(definition.initialState !== undefined ? { initialState: definition.initialState } : {}),
+    ...(definition.execution === undefined
+      ? {}
+      : {
+          execution: (() => {
+            const execution = expectRecord(definition.execution, `${path}.execution`);
+            const determinism = expectString(
+              execution.determinism,
+              `${path}.execution.determinism`,
+            );
+            if (!['deterministic', 'time-dependent', 'nondeterministic'].includes(determinism)) {
+              fail(`${path}.execution.determinism`, '未対応の決定性です。');
+            }
+            return {
+              determinism: determinism as NonNullable<NodeDefinition['execution']>['determinism'],
+              ...(execution.simulated === undefined
+                ? {}
+                : {
+                    simulated: optionalBoolean(execution.simulated, `${path}.execution.simulated`),
+                  }),
+            };
+          })(),
+        }),
     ...(customCode ? { customCode } : {}),
     ...(isAsync || customCode ? { isAsync: true } : {}),
     ...(isComposite ? { isComposite: true, compositeSubgraph } : {}),
@@ -352,6 +399,7 @@ function validateGraph(
 type ProjectMigration = (project: Record<string, unknown>) => Record<string, unknown>;
 
 const PROJECT_MIGRATIONS: Record<string, ProjectMigration> = {
+  '1.0.0': (project) => ({ ...project, version: CURRENT_PROJECT_VERSION }),
   [CURRENT_PROJECT_VERSION]: (project) => project,
 };
 

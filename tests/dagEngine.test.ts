@@ -149,15 +149,76 @@ describe('evaluateGraph', () => {
     expect(result['nc-out'].outputs.length).toBe(5);
   });
 
-  it('math/sqrtは負数に対してNaNを返す', () => {
+  it('math/sqrtは負数を定義域エラーにする', () => {
     const sqrt = BUILTIN_NODES.find(({ typeId }) => typeId === 'math/sqrt');
 
     expect(sqrt).toBeDefined();
-    expect(sqrt!.evaluate({ value: -1 }, {})).toEqual({ result: NaN });
+    expect(() => sqrt!.evaluate({ value: -1 }, {})).toThrow('DOMAIN_ERROR');
+  });
+
+  it('必須入力が未接続なら既定値を使わずエラーにする', () => {
+    const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
+    const result = evaluateGraph([{ id: 'add', typeId: 'math/add', x: 0, y: 0 }], [], builtins);
+
+    expect(result.add.error).toContain('INPUT_REQUIRED');
+  });
+
+  it('接続値の実行時型を検証する', () => {
+    const source: NodeDefinition = {
+      typeId: 'test/string-source',
+      label: 'String source',
+      category: 'Custom',
+      kind: 'input',
+      inputs: [],
+      outputs: [{ id: 'value', name: 'value', type: 'any' }],
+      evaluate: () => ({ value: 'not a number' }),
+    };
+    const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
+    builtins.set(source.typeId, source);
+    const result = evaluateGraph(
+      [
+        { id: 'source', typeId: source.typeId, x: 0, y: 0 },
+        { id: 'round', typeId: 'math/round', x: 100, y: 0 },
+      ],
+      [
+        {
+          id: 'connection',
+          fromNodeId: 'source',
+          fromPortId: 'value',
+          toNodeId: 'round',
+          toPortId: 'value',
+        },
+      ],
+      builtins,
+    );
+
+    expect(result.round.error).toContain('INPUT_TYPE');
   });
 });
 
 describe('generateTypeScriptCode', () => {
+  it('input/jsonの不正JSONを生成コードでもINPUT_TYPEにする', () => {
+    const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
+    const code = generateTypeScriptCode(
+      [
+        { id: 'json', typeId: 'input/json', x: 0, y: 0, state: { rawJson: '[]' } },
+        { id: 'output', typeId: 'output/inspector', x: 200, y: 0 },
+      ],
+      [
+        {
+          id: 'json-output',
+          fromNodeId: 'json',
+          fromPortId: 'value',
+          toNodeId: 'output',
+          toPortId: 'value',
+        },
+      ],
+      builtins,
+    );
+
+    expect(() => compileGeneratedPipeline(code)()).toThrow('INPUT_TYPE');
+  });
+
   it('2Dベクトル長プリセットと同じ結果を生成コードでも返す', () => {
     const preset = PRESETS.find(({ id }) => id === 'composite-vector-length');
     const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
@@ -170,7 +231,7 @@ describe('generateTypeScriptCode', () => {
     expect(Object.values(evaluatePipeline({ x: 6, y: 8 }))).toEqual([10]);
   });
 
-  it('math/sqrtの負数入力をNaNとして生成する', () => {
+  it('math/sqrtの負数入力を定義域エラーとして生成する', () => {
     const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
     const sqrtNodes: NodeInstance[] = [
       {
@@ -203,7 +264,7 @@ describe('generateTypeScriptCode', () => {
     const code = generateTypeScriptCode(sqrtNodes, sqrtConnections, builtins);
     const evaluatePipeline = compileGeneratedPipeline(code);
 
-    expect(Object.values(evaluatePipeline())).toEqual([NaN]);
+    expect(() => evaluatePipeline()).toThrow('DOMAIN_ERROR');
   });
 });
 

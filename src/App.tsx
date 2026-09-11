@@ -853,7 +853,10 @@ function EditorApp({
       typeId,
       x: Math.round(centerX + (Math.random() * 40 - 20)),
       y: Math.round(centerY + (Math.random() * 40 - 20)),
-      state: def.defaultState ? JSON.parse(JSON.stringify(def.defaultState)) : undefined,
+      state:
+        (def.initialState ?? def.defaultState) !== undefined
+          ? JSON.parse(JSON.stringify(def.initialState ?? def.defaultState))
+          : undefined,
     };
 
     setNodes((prev) => [...prev, newNode]);

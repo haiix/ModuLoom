@@ -242,7 +242,7 @@ class EvaluatingWorker {
 describe('project schema validation', () => {
   it('未対応バージョンを明確なメッセージで拒否する', () => {
     expect(() => parseFlowProject(createProject({ version: '2.0.0' }))).toThrowError(
-      /project\.version: 未対応のバージョン '2\.0\.0'.*1\.0\.0/,
+      /project\.version: 未対応のバージョン '2\.0\.0'.*1\.1\.0/,
     );
   });
 

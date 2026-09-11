@@ -21,11 +21,11 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
   'input/boolean': emitter((_i, s) => `{ value: Boolean(${s}.value) }`),
   'input/array': emitter(
     (_i, s) =>
-      `(() => { const raw = String(${s}.rawText ?? ''); const value = raw.split(',').map(value => value.trim()).filter(Boolean); return { value: ${s}.type === 'string' ? value : value.map(Number).filter(value => !Number.isNaN(value)) }; })()`,
+      `(() => { const raw = String(${s}.rawText ?? ''); const value = raw.split(',').map(value => value.trim()).filter(Boolean); if (${s}.type === 'string') return { value }; const numbers = value.map(Number); if (numbers.some(value => !Number.isFinite(value))) throw new Error('INPUT_TYPE: 数値CSVに変換できない要素があります。'); return { value: numbers }; })()`,
   ),
   'input/json': emitter(
     (_i, s) =>
-      `(() => { try { return { value: JSON.parse(${s}.rawJson || '{}') }; } catch { return { value: {} }; } })()`,
+      `(() => { try { const value = JSON.parse(${s}.rawJson || '{}'); if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('JSONオブジェクトを入力してください。'); return { value }; } catch (error) { throw new Error(\`INPUT_TYPE: \${error instanceof Error ? error.message : 'JSONが不正です。'}\`); } })()`,
   ),
 
   'math/add': emitter((i) => `{ result: Number(${i}.a ?? 0) + Number(${i}.b ?? 0) }`),
@@ -35,10 +35,16 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
     (i) =>
       `(() => { const a = Number(${i}.a ?? 0); const b = Number(${i}.b ?? 1); if (b === 0) throw new Error('ゼロ除算エラー (Division by zero)'); return { result: a / b }; })()`,
   ),
-  'math/modulo': emitter((i) => `{ result: Number(${i}.a ?? 0) % Number(${i}.b ?? 1) }`),
+  'math/modulo': emitter(
+    (i) =>
+      `(() => { if (${i}.b === 0) throw new Error('DOMAIN_ERROR: ゼロ除算エラー (Modulo by zero)'); return { result: ${i}.a % ${i}.b }; })()`,
+  ),
   'math/round': emitter((i) => `{ result: Math.round(Number(${i}.value ?? 0)) }`),
   'math/abs': emitter((i) => `{ result: Math.abs(Number(${i}.value ?? 0)) }`),
-  'math/sqrt': emitter((i) => `{ result: Math.sqrt(Number(${i}.value ?? 0)) }`),
+  'math/sqrt': emitter(
+    (i) =>
+      `(() => { if (${i}.value < 0) throw new Error('DOMAIN_ERROR: 負数の平方根は計算できません。'); return { result: Math.sqrt(${i}.value) }; })()`,
+  ),
 
   'string/concat': emitter((i) => `{ result: String(${i}.a ?? '') + String(${i}.b ?? '') }`),
   'string/template': emitter(
@@ -59,9 +65,7 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
   'logic/equal': emitter((i) => `{ result: ${i}.a === ${i}.b }`),
   'logic/branch': emitter((i) => `{ result: ${i}.condition ? ${i}.ifTrue : ${i}.ifFalse }`),
 
-  'array/create': emitter(
-    (i) => `{ result: [${i}.item1, ${i}.item2].filter(value => value !== undefined) }`,
-  ),
+  'array/create': emitter((i) => `{ result: [${i}.item1, ${i}.item2] }`),
   'array/length': emitter((i) => `{ result: Array.isArray(${i}.arr) ? ${i}.arr.length : 0 }`),
   'array/join': emitter(
     (i) =>
@@ -69,11 +73,11 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
   ),
   'array/map': emitter(
     (i, s) =>
-      `(() => { const values = Array.isArray(${i}.arr) ? ${i}.arr : []; const factor = Number(${i}.factor ?? 2); const operator = ${s}.operator || '*'; return { result: values.map(value => { if (typeof value !== 'number') return value; switch (operator) { case '+': return value + factor; case '-': return value - factor; case '/': return factor !== 0 ? value / factor : value; default: return value * factor; } }) }; })()`,
+      `(() => { const values = Array.isArray(${i}.arr) ? ${i}.arr : []; const factor = Number(${i}.factor ?? 2); const operator = ${s}.operator || '*'; if (operator === '/' && factor === 0) throw new Error('DOMAIN_ERROR: Array Mapの除数は0にできません。'); return { result: values.map(value => { if (typeof value !== 'number') return value; switch (operator) { case '+': return value + factor; case '-': return value - factor; case '/': return value / factor; default: return value * factor; } }) }; })()`,
   ),
   'array/filter': emitter(
     (i, s) =>
-      `(() => { const values = Array.isArray(${i}.arr) ? ${i}.arr : []; const threshold = Number(${i}.threshold ?? 0); const operator = ${s}.operator || '>'; return { result: values.filter(value => { if (typeof value !== 'number') return false; switch (operator) { case '>=': return value >= threshold; case '<': return value < threshold; case '<=': return value <= threshold; case '==': return value === threshold; case '!=': return value !== threshold; default: return value > threshold; } }) }; })()`,
+      `(() => { const values = Array.isArray(${i}.arr) ? ${i}.arr : []; const threshold = Number(${i}.threshold ?? 0); const operator = ${s}.operator || '>'; return { result: values.filter(value => { if (typeof value !== 'number') return false; switch (operator) { case '>=': return value >= threshold; case '<': return value < threshold; case '<=': return value <= threshold; case '===': case '==': return value === threshold; case '!==': case '!=': return value !== threshold; default: return value > threshold; } }) }; })()`,
   ),
   'array/slice': emitter(
     (i) =>
@@ -84,17 +88,20 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
   ),
   'array/sum': emitter(
     (i) =>
-      `{ result: (Array.isArray(${i}.arr) ? ${i}.arr : []).reduce((sum, value) => sum + (typeof value === 'number' ? value : 0), 0) }`,
+      `(() => { const values = Array.isArray(${i}.arr) ? ${i}.arr : []; if (values.some(value => typeof value !== 'number' || !Number.isFinite(value))) throw new Error('INPUT_TYPE: Array Sumには有限数だけを含む配列が必要です。'); return { result: values.reduce((sum, value) => sum + value, 0) }; })()`,
   ),
 
-  'object/create': emitter((i) => `{ result: { [String(${i}.key ?? 'key')]: ${i}.value } }`),
+  'object/create': emitter(
+    (i) =>
+      `(() => { const key = ${i}.key; if (!key || ['__proto__', 'prototype', 'constructor'].includes(key)) throw new Error('INPUT_CONSTRAINT: 使用できないオブジェクトキーです。'); return { result: { [key]: ${i}.value } }; })()`,
+  ),
   'object/get': emitter(
     (i) =>
-      `(() => { const value = ${i}.obj && typeof ${i}.obj === 'object' ? ${i}.obj : {}; return { result: value[${i}.key] }; })()`,
+      `(() => { const value = ${i}.obj; if (!Object.prototype.hasOwnProperty.call(value, ${i}.key)) throw new Error(\`DOMAIN_ERROR: プロパティ '\${${i}.key}' が存在しません。\`); return { result: value[${i}.key] }; })()`,
   ),
   'object/stringify': emitter(
     (i) =>
-      `(() => { try { return { result: JSON.stringify(${i}.data, null, 2) }; } catch { return { result: '' }; } })()`,
+      `(() => { try { return { result: JSON.stringify(${i}.data, null, 2) }; } catch { throw new Error('DOMAIN_ERROR: JSONへ直列化できません。'); } })()`,
   ),
 
   'output/inspector': emitter((i) => `{ displayedValue: ${i}.value }`),

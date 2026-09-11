@@ -72,7 +72,7 @@ npm run dev
 
 - [利用ガイド](documents/user-guide.md) — 画面操作、カスタム型・自作ノード・複合ノードの作り方
 - [アーキテクチャ](documents/architecture.md) — データモデル、型検査、DAG評価、非同期評価の設計
-- [ノードリファレンス](documents/node-reference.md) — 組み込みノードとプリセットの一覧
+- [ノード実行契約](documents/node-contract.md) — 組み込みノードの仕様
 - [プロジェクトファイル仕様](documents/project-format.md) — JSON 保存形式と互換性上の注意
 - [開発ガイド](documents/development.md) — ディレクトリ構成、変更時の要点、検証方法
 - [既知の制約と確認事項](documents/known-limitations.md) — 現行実装で注意すべき点と未確定事項

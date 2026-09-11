@@ -103,7 +103,7 @@ const inputOverrides: Record<string, Record<string, unknown>> = {
 };
 
 const stateOverrides: Record<string, unknown> = {
-  'input/array': { rawText: '1, two, 3', type: 'number' },
+  'input/array': { rawText: '1, 2, 3', type: 'number' },
   'input/json': { rawJson: '{"ok":true}' },
   'array/map': { operator: '+' },
   'array/filter': { operator: '<=' },
@@ -111,6 +111,26 @@ const stateOverrides: Record<string, unknown> = {
   'composite/input-port': { portName: 'x', portType: 'number', testValue: 7 },
   'composite/output-port': { portName: 'result', portType: 'number' },
 };
+
+function representativePortValue(port: NodeDefinition['inputs'][number]): unknown {
+  if (port.defaultValue !== undefined) return clone(port.defaultValue);
+  switch (port.type) {
+    case 'number':
+      return 1;
+    case 'string':
+      return 'value';
+    case 'boolean':
+      return true;
+    case 'array':
+      return [];
+    case 'object':
+      return { value: 1 };
+    case 'any':
+      return 'value';
+    default:
+      return undefined;
+  }
+}
 
 async function normalize(value: unknown): Promise<unknown> {
   if (value && typeof (value as PromiseLike<unknown>).then === 'function') {
@@ -142,9 +162,12 @@ async function compareBuiltin(definition: NodeDefinition): Promise<string> {
       port.id,
       Object.prototype.hasOwnProperty.call(overrides, port.id)
         ? clone(overrides[port.id])
-        : clone(port.defaultValue),
+        : representativePortValue(port),
     ]),
   );
+  if (definition.typeId === 'composite/input-port') {
+    runtimeInputs.in = undefined;
+  }
   const nodes: NodeInstance[] = [{ id: 'target', typeId: definition.typeId, x: 0, y: 0, state }];
   const connections: Connection[] = [];
   const definitions = new Map(builtins);

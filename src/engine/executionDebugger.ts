@@ -9,6 +9,7 @@ import {
   evaluateCompositeNode,
   evaluateCompositeNodeAsync,
   getTopologicalOrder,
+  resolveNodeInputs,
 } from './dagEngine';
 import { isAsyncIterable, isPromise } from './streamEngine';
 
@@ -155,15 +156,7 @@ export class DagExecutionDebugger {
 
     const { inputs, sourceErrorPath, sourceError } = this.resolveInputs(nodeId, definition);
     if (sourceError) {
-      this.record(
-        nodeId,
-        inputs,
-        {},
-        `入力元ノードでエラーが発生しています: ${sourceError}`,
-        0,
-        false,
-        [...sourceErrorPath, nodeId],
-      );
+      this.record(nodeId, inputs, {}, sourceError, 0, false, [...sourceErrorPath, nodeId]);
       return;
     }
 
@@ -258,27 +251,17 @@ export class DagExecutionDebugger {
   }
 
   private resolveInputs(nodeId: string, definition: NodeDefinition) {
-    const inputs: Record<string, unknown> = {};
-    for (const port of definition.inputs) {
-      const connection = this.incoming.get(`${nodeId}:${port.id}`);
-      if (!connection) {
-        inputs[port.id] = cloneValue(port.defaultValue);
-        continue;
-      }
-      const source = this.evaluation[connection.fromNodeId];
-      if (source?.error) {
-        return {
-          inputs,
-          sourceError: source.error,
-          sourceErrorPath: this.traces[connection.fromNodeId]?.errorPath ?? [connection.fromNodeId],
-        };
-      }
-      inputs[port.id] =
-        source && connection.fromPortId in source.outputs
-          ? source.outputs[connection.fromPortId]
-          : cloneValue(port.defaultValue);
-    }
-    return { inputs, sourceErrorPath: [] as string[], sourceError: undefined };
+    const resolved = resolveNodeInputs(nodeId, definition, this.incoming, this.evaluation);
+    const sourceConnection = definition.inputs
+      .map((port) => this.incoming.get(`${nodeId}:${port.id}`))
+      .find((connection) => connection && this.evaluation[connection.fromNodeId]?.error);
+    return {
+      inputs: resolved.inputs,
+      sourceError: resolved.error,
+      sourceErrorPath: sourceConnection
+        ? (this.traces[sourceConnection.fromNodeId]?.errorPath ?? [sourceConnection.fromNodeId])
+        : ([] as string[]),
+    };
   }
 
   private async collectStream(
@@ -358,10 +341,6 @@ export class DagExecutionDebugger {
     listener?.(snapshot);
     return snapshot;
   }
-}
-
-function cloneValue(value: unknown) {
-  return value !== null && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : value;
 }
 
 function stableSerialize(value: unknown) {

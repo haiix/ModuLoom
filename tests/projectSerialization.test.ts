@@ -52,7 +52,7 @@ describe('project serialization', () => {
     });
     const restored = parseRecoverySnapshot(JSON.parse(JSON.stringify(snapshot)));
 
-    expect(restored.project.version).toBe('1.0.0');
+    expect(restored.project.version).toBe('1.1.0');
     expect(restored.project.viewport).toEqual(project.viewport);
     expect(restored.project.customDefinitions?.[0].customCode).toBe('inputs.value * 2');
     expect(restored.project.customDefinitions?.[0].evaluate).toBeTypeOf('function');
