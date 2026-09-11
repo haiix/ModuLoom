@@ -40,9 +40,9 @@
 | Advanced   | Composite    | `composite/input-port`, `composite/output-port`                                                                   |
 | Examples   | Async        | `async/fetch`                                                                                                     |
 
-新規プロジェクトに同梱する User / Point2D から生成される Constructor、Deconstruct、Validate の
-6件も Examples に配置します。ユーザーが新しく作るカスタム型由来ノード、自作ノード、作成済み
-複合ノードは Project に配置します。
+User / Point2D を含むサンプルを開く・挿入したときに生成される Constructor、Deconstruct、
+Validate は Examples に配置します。新規プロジェクトへ教材型は自動投入しません。ユーザーが
+新しく作るカスタム型由来ノード、自作ノード、作成済み複合ノードは Project に配置します。
 
 ## Node Library の情報設計
 
@@ -53,7 +53,7 @@
   ▼ Math (8)
   ...
 ▶ Advanced (21)    必要に応じて使う高度なノード
-▶ Examples (7)     学習用の定義とシミュレーション
+▶ Examples (1+n)   学習用の定義とシミュレーション
 ▼ Project (n)      このプロジェクト固有のノード
 ```
 

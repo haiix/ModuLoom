@@ -6,9 +6,10 @@ import {
   GraphEvaluation,
   CustomTypeDefinition,
   LoadedFlowProject,
+  GraphPreset,
 } from './types';
 import { BUILTIN_NODES, PRESETS } from './nodes/definitions';
-import { INITIAL_CUSTOM_TYPES, generateNodesForCustomType } from './nodes/customTypeNodes';
+import { generateNodesForCustomType } from './nodes/customTypeNodes';
 import {
   evaluateGraph,
   evaluateGraphAsync,
@@ -37,6 +38,7 @@ import { CustomNodeModal } from './components/CustomNodeModal';
 import { CustomTypeModal } from './components/CustomTypeModal';
 import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
+import { PresetGalleryModal } from './components/PresetGalleryModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
 import {
   createRecoverySnapshot,
@@ -70,6 +72,7 @@ import {
   undoEditorHistory,
   type EditorDocument,
 } from './engine/editorHistory';
+import { insertPreset, openPresetAsNew } from './engine/presetApplication';
 import {
   alignSelectedNodes,
   createGraphClipboard,
@@ -294,7 +297,7 @@ function EditorApp({
       nodes: initialProject?.nodes ?? [],
       connections: initialProject?.connections ?? [],
       customDefinitions: initialProject?.customDefinitions ?? [],
-      customTypes: initialProject?.customTypes ?? INITIAL_CUSTOM_TYPES,
+      customTypes: initialProject?.customTypes ?? [],
     }),
   );
   const { nodes, connections, customDefinitions, customTypes } = editorHistory.present;
@@ -473,6 +476,7 @@ function EditorApp({
   const [isCustomTypeModalOpen, setIsCustomTypeModalOpen] = useState(false);
   const [isCodeExportModalOpen, setIsCodeExportModalOpen] = useState(false);
   const [isCreateCompositeOpen, setIsCreateCompositeOpen] = useState(false);
+  const [isPresetGalleryOpen, setIsPresetGalleryOpen] = useState(false);
   const [showDagViewer, setShowDagViewer] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     try {
@@ -863,20 +867,44 @@ function EditorApp({
     return newNode;
   };
 
-  const handleSelectPreset = (presetId: string) => {
-    const preset = PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
+  const resetExecutionState = () => {
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
-    updateEditorDocument((document) => ({
-      ...document,
-      nodes: preset.nodes,
-      connections: preset.connections,
-    }));
-    setZoom(1.0);
-    setPan({ x: 60, y: 80 });
     executionDebuggerRef.current?.cancel();
     executionDebuggerRef.current = null;
     setDebugSnapshot(null);
+    setEvaluation({});
+  };
+
+  const handleOpenPreset = (preset: GraphPreset): string | undefined => {
+    updateEditorDocument((document) => openPresetAsNew(document, preset));
+    setZoom(1.0);
+    setPan({ x: 60, y: 80 });
+    resetExecutionState();
+    return undefined;
+  };
+
+  const handleInsertPreset = (preset: GraphPreset): string | undefined => {
+    const containerEl = document.querySelector('main');
+    const bounds = containerEl?.getBoundingClientRect();
+    const x = bounds ? (bounds.width / 2 - pan.x) / zoom - 250 : 100;
+    const y = bounds ? (bounds.height / 2 - pan.y) / zoom - 80 : 100;
+    try {
+      const nextDocument = insertPreset(editorHistory.present, preset, {
+        idPrefix: `preset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x,
+        y,
+      });
+      updateEditorDocument(() => nextDocument);
+      resetExecutionState();
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+
+  const handleSelectPreset = (presetId: string) => {
+    const preset = PRESETS.find((item) => item.id === presetId);
+    if (preset) handleOpenPreset(preset);
   };
 
   const hideOnboarding = (status: 'skipped' | 'completed') => {
@@ -908,7 +936,7 @@ function EditorApp({
         nodes: [],
         connections: [],
         customDefinitions: [],
-        customTypes: INITIAL_CUSTOM_TYPES,
+        customTypes: [],
       }),
     );
     setZoom(1);
@@ -1519,7 +1547,7 @@ function EditorApp({
     <div className="relative w-screen h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 flex flex-col">
       {/* Top Toolbar */}
       <Toolbar
-        onSelectPreset={handleSelectPreset}
+        onOpenPresetGallery={() => setIsPresetGalleryOpen(true)}
         onClearGraph={handleClearGraph}
         onOpenLibrary={() => setIsLibraryOpen((o) => !o)}
         onOpenCustomTypeModal={() => setIsCustomTypeModalOpen(true)}
@@ -1726,6 +1754,17 @@ function EditorApp({
         onClose={() => setIsLoadModalOpen(false)}
         onLoadProject={handleLoadProject}
         currentNodeCount={nodes.length}
+      />
+
+      <PresetGalleryModal
+        isOpen={isPresetGalleryOpen}
+        presets={PRESETS}
+        hasCurrentContent={
+          nodes.length > 0 || customTypes.length > 0 || customDefinitions.length > 0
+        }
+        onClose={() => setIsPresetGalleryOpen(false)}
+        onOpenAsNew={handleOpenPreset}
+        onInsert={handleInsertPreset}
       />
 
       {/* Custom Type System Creator Modal */}

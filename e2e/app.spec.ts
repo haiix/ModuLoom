@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test.beforeEach(async ({ page }) => {
@@ -7,6 +7,17 @@ test.beforeEach(async ({ page }) => {
   });
   await page.goto('/');
 });
+
+async function openPreset(page: Page, presetId: string) {
+  const hasGraph = (await page.locator('[data-node-id]').count()) > 0;
+  if (hasGraph) page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('menuitem', { name: 'サンプルギャラリー' }).click();
+  await page
+    .locator(`[data-preset-id="${presetId}"]`)
+    .getByRole('button', { name: '新規として開く' })
+    .click();
+}
 
 test('空のキャンバスと主要操作を表示する', async ({ page }) => {
   await expect(page.getByText('キャンバスは空です')).toHaveCount(0);
@@ -54,8 +65,7 @@ test('ノードライブラリを開いてもはじめてガイドと重なら�
 });
 
 test('選択ノード操作はノードライブラリの開閉状態にかかわらず重ならない', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
   await page.locator('[data-node-id="n-slider-a"] .node-drag-handle').click();
 
@@ -107,8 +117,7 @@ test('キャンバスは右ドラッグで移動し、中ドラッグでは移�
 });
 
 test('キャンバスは左ドラッグでノードを範囲選択する', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
 
   const node = page.locator('[data-node-id="n-slider-a"]');
@@ -124,17 +133,34 @@ test('キャンバスは左ドラッグでノードを範囲選択する', async
 });
 
 test('四則演算プリセットを実行して結果を表示する', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
 
   await expect(page.locator('[data-node-id="n-out-inspector"]')).toContainText('最終計算結果');
   await page.getByRole('button', { name: 'グラフを実行', exact: true }).click();
   await expect(page.locator('[data-node-id="n-out-inspector"]')).toContainText('111');
 });
 
-test('編集内容とviewportを自動保存し、再読み込み時に復元する', async ({ page }) => {
+test('ギャラリーを検索して依存型を含むサンプルを挿入する', async ({ page }) => {
   await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await page.getByRole('menuitem', { name: 'サンプルギャラリー' }).click();
+  const gallery = page.getByRole('dialog', { name: 'サンプルギャラリー' });
+  await gallery.getByRole('textbox', { name: 'サンプルを検索' }).fill('Custom Type');
+  await expect(gallery.locator('[data-preset-id]')).toHaveCount(1);
+  await gallery.getByRole('button', { name: '挿入' }).click();
+
+  await expect(page.getByText('User Constructor (生成)', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await expect(page.getByRole('menuitem', { name: 'カスタム型 (1)' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: '元に戻す' }).click();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await expect(page.getByRole('menuitem', { name: 'カスタム型 (0)' })).toBeVisible();
+});
+
+test('編集内容とviewportを自動保存し、再読み込み時に復元する', async ({ page }) => {
+  await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
 
   const node = page.locator('[data-node-id="n-slider-a"]');
@@ -190,8 +216,7 @@ test('編集内容とviewportを自動保存し、再読み込み時に復元す
 });
 
 test('visibilitychangeとpagehideでデバウンス待ちの編集を直ちに保存する', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await expect(page.getByRole('status')).toContainText('保存中');
 
   await page.evaluate(() => {
@@ -268,8 +293,7 @@ test('Local Storageが利用できなくてもノードライブラリを操作�
 });
 
 test('IndexedDB復元はLocal Storageのノードライブラリ設定を上書きしない', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
   await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
 
@@ -292,8 +316,7 @@ test('IndexedDBが利用できない場合も編集を継続できる', async ({
   await page.reload();
 
   await expect(page.getByRole('alert')).toContainText('IndexedDB disabled');
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
 });
 
@@ -307,8 +330,7 @@ test('IndexedDBの容量超過を通知し、後続操作を妨げない', async
     });
   });
   await page.reload();
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
 
   await expect(page.getByRole('status')).toContainText('自動保存に失敗');
   await expect(page.getByRole('alert')).toContainText('容量不足テスト');
@@ -326,8 +348,7 @@ test('IndexedDBの書き込み失敗を通知し、次の編集を受け付け�
     });
   });
   await page.reload();
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
 
   await expect(page.getByRole('status')).toContainText('自動保存に失敗');
   await expect(page.getByRole('alert')).toContainText('書き込み失敗テスト');
@@ -336,16 +357,14 @@ test('IndexedDBの書き込み失敗を通知し、次の編集を受け付け�
 });
 
 test('JSONダウンロードしたプロジェクトを読み込んで既存内容を置き換える', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'プロジェクトを保存' }).click();
   const download = await downloadPromise;
   const downloadPath = await download.path();
   if (!downloadPath) throw new Error('ダウンロードファイルのパスを取得できませんでした。');
 
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('string-template');
+  await openPreset(page, 'string-template');
   await expect(page.locator('[data-node-id="n-txt-name"]')).toBeVisible();
 
   await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
@@ -361,8 +380,7 @@ test('JSONダウンロードしたプロジェクトを読み込んで既存内�
 });
 
 test('破損JSONと未対応project versionを部分適用せず拒否する', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
   const fileInput = page.locator('input[type="file"]');
 
@@ -389,14 +407,10 @@ test('BroadcastChannelなしでも他タブの保存を上書きせず両方の�
   });
   await otherPage.goto('/');
 
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
 
-  await otherPage.getByRole('button', { name: 'その他の操作' }).click();
-  await otherPage
-    .getByRole('combobox', { name: 'プリセットを選択' })
-    .selectOption('string-template');
+  await openPreset(otherPage, 'string-template');
   const conflict = otherPage.getByRole('alert');
   await expect(conflict).toContainText('別のタブで新しい編集が保存されました。');
   await expect(otherPage.locator('[data-node-id="n-txt-name"]')).toBeVisible();
@@ -416,8 +430,7 @@ test('BroadcastChannelで他タブの更新を編集前に通知する', async (
   const otherPage = await page.context().newPage();
   await otherPage.goto('/');
 
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
 
   await expect(otherPage.getByRole('alert')).toContainText(
@@ -426,8 +439,7 @@ test('BroadcastChannelで他タブの更新を編集前に通知する', async (
 });
 
 test('全消去を確定すると古いグラフを次回復元しない', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await openPreset(page, 'math-calc');
   await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
 
   await page.getByRole('button', { name: 'その他の操作' }).click();
@@ -632,9 +644,8 @@ test('自作式の非同期処理、VM制限、Worker復旧をQuickJSで処理�
   await expect(page.getByText('テスト実行成功:')).toContainText('30');
 });
 
-test('プリセットの適用を元に戻してやり直せる', async ({ page }) => {
-  await page.getByRole('button', { name: 'その他の操作' }).click();
-  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+test('サンプルの適用を元に戻してやり直せる', async ({ page }) => {
+  await openPreset(page, 'math-calc');
   await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
 
   await page.getByRole('button', { name: '元に戻す' }).click();
