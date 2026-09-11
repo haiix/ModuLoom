@@ -168,10 +168,11 @@ interface CompositeSubgraph {
 
 ```ts
 interface RecoverySnapshot {
-  storageVersion: 1;
+  storageVersion: 2;
   project: FlowProjectExport;
   updatedAt: string;
   revision: number;
+  writerId: string;
   wasDirty: boolean;
   trustedCodeFingerprint?: string;
 }
@@ -188,6 +189,11 @@ interface RecoverySnapshot {
 SHA-256です。復元時に現在内容から再計算した値と一致する場合だけ信頼状態を継続します。
 値が欠落・不正・不一致の場合はエディターを開始せず、利用者の明示的な信頼確認を要求します。
 スキーマ、式の構文、禁止APIの検査はfingerprintの有無にかかわらず毎回実行します。
+
+`revision` は保存ごとに単調増加し、`writerId` はタブごとに生成します。保存はIndexedDBの
+単一readwriteトランザクション内で現在のrevisionと直前に読み込んだrevisionを比較してから
+行います。異なる場合は他タブの内容を上書きせず、自動保存を停止します。旧
+`storageVersion: 1` は読み込み時に現行形式へ移行します。
 
 ## セキュリティ
 

@@ -11,7 +11,7 @@ import type {
 import type { EditorDocument } from './editorHistory';
 import { CURRENT_PROJECT_VERSION, parseFlowProject, ProjectValidationError } from './projectFormat';
 
-export const CURRENT_RECOVERY_STORAGE_VERSION = 1 as const;
+export const CURRENT_RECOVERY_STORAGE_VERSION = 2 as const;
 
 export interface ProjectViewport {
   zoom: number;
@@ -23,6 +23,7 @@ export interface RecoverySnapshot {
   project: FlowProjectExport;
   updatedAt: string;
   revision: number;
+  writerId: string;
   wasDirty: boolean;
   trustedCodeFingerprint?: string;
 }
@@ -163,7 +164,10 @@ function expectRecord(value: unknown, path: string): Record<string, unknown> {
 
 export function parseRecoverySnapshot(input: unknown): ParsedRecoverySnapshot {
   const snapshot = expectRecord(input, 'snapshot');
-  if (snapshot.storageVersion !== CURRENT_RECOVERY_STORAGE_VERSION) {
+  if (
+    snapshot.storageVersion !== 1 &&
+    snapshot.storageVersion !== CURRENT_RECOVERY_STORAGE_VERSION
+  ) {
     throw new ProjectValidationError(
       `snapshot.storageVersion: 未対応のバージョン '${String(snapshot.storageVersion)}' です。` +
         ` 対応バージョンは '${CURRENT_RECOVERY_STORAGE_VERSION}' です。`,
@@ -174,6 +178,12 @@ export function parseRecoverySnapshot(input: unknown): ParsedRecoverySnapshot {
   }
   if (!Number.isSafeInteger(snapshot.revision) || (snapshot.revision as number) < 0) {
     throw new ProjectValidationError('snapshot.revision: 0以上の安全な整数である必要があります。');
+  }
+  if (
+    snapshot.storageVersion === CURRENT_RECOVERY_STORAGE_VERSION &&
+    (typeof snapshot.writerId !== 'string' || snapshot.writerId.trim() === '')
+  ) {
+    throw new ProjectValidationError('snapshot.writerId: 空でない文字列である必要があります。');
   }
   if (typeof snapshot.wasDirty !== 'boolean') {
     throw new ProjectValidationError('snapshot.wasDirty: boolean である必要があります。');
@@ -193,6 +203,8 @@ export function parseRecoverySnapshot(input: unknown): ParsedRecoverySnapshot {
     project: parseFlowProject(snapshot.project),
     updatedAt: snapshot.updatedAt,
     revision: snapshot.revision as number,
+    writerId:
+      snapshot.storageVersion === 1 ? 'legacy-recovery-snapshot' : (snapshot.writerId as string),
     wasDirty: snapshot.wasDirty,
     ...(snapshot.trustedCodeFingerprint !== undefined
       ? { trustedCodeFingerprint: snapshot.trustedCodeFingerprint as string }
