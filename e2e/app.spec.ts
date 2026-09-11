@@ -148,14 +148,37 @@ test('編集内容とviewportを自動保存し、再読み込み時に復元す
   );
 
   await page.waitForTimeout(600);
-  page.once('dialog', (dialog) => void dialog.accept());
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
   await page.reload();
 
   await expect(page.locator('[data-node-id="n-slider-a"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'ノードライブラリを開く' })).toBeVisible();
+  await expect(page.getByText('前回の編集状態を復元しました。')).toBeVisible();
   await expect
     .poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundPosition))
     .toBe(savedPosition);
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: '破棄して新規作成' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+  await page.reload();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+});
+
+test('全消去を確定すると古いグラフを次回復元しない', async ({ page }) => {
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('combobox', { name: 'プリセットを選択' }).selectOption('math-calc');
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('menuitem', { name: 'キャンバスを全消去' }).click();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('ブラウザに保存済み');
+  await page.reload();
+  await expect(page.locator('[data-node-id]')).toHaveCount(0);
 });
 
 test('不正な復元データを部分適用せず、明示的に破棄できる', async ({ page }) => {
@@ -176,10 +199,10 @@ test('不正な復元データを部分適用せず、明示的に破棄でき�
   });
 
   await page.reload();
-  await expect(page.getByRole('status')).toContainText('storageVersion');
+  await expect(page.getByRole('alert')).toContainText('storageVersion');
   await expect(page.locator('[data-node-id]')).toHaveCount(0);
   await page.getByRole('button', { name: '復元データを破棄' }).click();
-  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('復元した自作式は信頼確認前に適用せず、同一内容だけ信頼を継続する', async ({ page }) => {

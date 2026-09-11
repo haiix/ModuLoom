@@ -20,6 +20,7 @@ import {
 import { PRESETS } from '../nodes/definitions';
 import { DataType, type CustomTypeDefinition, getTypeStyle } from '../types';
 import { getToolbarPresentation } from './toolbarLayout';
+import type { DebouncedSaveStatus } from '../engine/debouncedSave';
 
 interface ToolbarProps {
   onSelectPreset: (id: string) => void;
@@ -39,6 +40,7 @@ interface ToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   isDirty: boolean;
+  browserSaveStatus: DebouncedSaveStatus;
   onUndo: () => void;
   onRedo: () => void;
 }
@@ -65,6 +67,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   canUndo,
   canRedo,
   isDirty,
+  browserSaveStatus,
   onUndo,
   onRedo,
 }) => {
@@ -127,9 +130,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         {isDirty && (
           <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            {presentation.showActionLabels && '未保存'}
+            {presentation.showActionLabels && 'JSON未書き出し'}
           </span>
         )}
+        <span
+          role="status"
+          aria-live="polite"
+          className={`shrink-0 text-[10px] font-medium ${
+            browserSaveStatus === 'error'
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
+          {browserSaveStatus === 'pending' || browserSaveStatus === 'saving'
+            ? '保存中'
+            : browserSaveStatus === 'saved'
+              ? 'ブラウザに保存済み'
+              : browserSaveStatus === 'error'
+                ? '自動保存に失敗'
+                : 'ブラウザ保存待機'}
+        </span>
       </div>
       <nav className="ml-auto flex shrink-0 items-center gap-1.5" aria-label="主要操作">
         <PrimaryButton
