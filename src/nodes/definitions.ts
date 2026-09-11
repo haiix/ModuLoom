@@ -1,8 +1,9 @@
 import { NodeDefinition, GraphPreset } from '../types';
 import { ASYNC_STREAM_NODES } from './asyncStreamNodes';
 import { BUILTIN_NODE_CODEGEN } from './codegen';
+import { getBuiltinCatalogMetadata } from './nodeCatalog';
 
-export const BUILTIN_NODES: NodeDefinition[] = [
+const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
   ...ASYNC_STREAM_NODES,
   // ==========================================
   // INPUT / SOURCE NODES
@@ -766,6 +767,11 @@ export const BUILTIN_NODES: NodeDefinition[] = [
     },
   },
 ];
+
+export const BUILTIN_NODES: NodeDefinition[] = BUILTIN_NODE_IMPLEMENTATIONS.map((definition) => ({
+  ...definition,
+  catalog: getBuiltinCatalogMetadata(definition.typeId),
+}));
 
 const OPTIONAL_INPUTS = new Set([
   'string/split:separator',

@@ -78,6 +78,7 @@ function serializeCustomType(customType: CustomTypeDefinition): CustomTypeDefini
     name: customType.name,
     color: customType.color,
     ...(customType.description !== undefined ? { description: customType.description } : {}),
+    ...(customType.catalogSource !== undefined ? { catalogSource: customType.catalogSource } : {}),
     fields: customType.fields.map((field) => ({
       name: field.name,
       type: field.type,
@@ -103,6 +104,7 @@ function serializeDefinition(definition: NodeDefinition): SerializedNodeDefiniti
     ...(definition.defaultState !== undefined ? { defaultState: definition.defaultState } : {}),
     ...(definition.initialState !== undefined ? { initialState: definition.initialState } : {}),
     ...(definition.execution !== undefined ? { execution: definition.execution } : {}),
+    ...(definition.catalog !== undefined ? { catalog: definition.catalog } : {}),
     ...(definition.customCode !== undefined ? { customCode: definition.customCode } : {}),
     ...(definition.isAsync !== undefined ? { isAsync: definition.isAsync } : {}),
     ...(definition.isComposite !== undefined ? { isComposite: definition.isComposite } : {}),

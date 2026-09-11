@@ -15,6 +15,8 @@ export interface CustomTypeDefinition {
   color: string; // hex color code e.g. "#ec4899"
   description?: string;
   fields: CustomTypeField[];
+  /** Example types ship with the app; omitted values are project-owned. */
+  catalogSource?: Extract<NodeCatalogSource, 'example' | 'project'>;
 }
 
 export type NodeKind = 'pure' | 'input' | 'output';
@@ -40,6 +42,15 @@ export interface Port {
 export interface NodeExecutionMetadata {
   determinism: 'deterministic' | 'time-dependent' | 'nondeterministic';
   simulated?: boolean;
+}
+
+export type NodeCatalogLevel = 'core' | 'advanced';
+export type NodeCatalogSource = 'builtin' | 'example' | 'project';
+
+export interface NodeCatalogMetadata {
+  level: NodeCatalogLevel;
+  source: NodeCatalogSource;
+  searchTags: string[];
 }
 
 export interface CompositeSubgraph {
@@ -87,6 +98,7 @@ export interface NodeDefinition {
   /** State copied into an instance when it is placed on the canvas. */
   initialState?: any;
   execution?: NodeExecutionMetadata;
+  catalog?: NodeCatalogMetadata;
   customCode?: string; // For user-defined custom pure functions
   codegen?: NodeCodegenMetadata;
   isAsync?: boolean;

@@ -5,6 +5,11 @@ import { CustomTypeDefinition, NodeDefinition } from '../types';
  */
 export function generateNodesForCustomType(customType: CustomTypeDefinition): NodeDefinition[] {
   const { id, name } = customType;
+  const catalog = {
+    level: 'advanced' as const,
+    source: customType.catalogSource ?? ('project' as const),
+    searchTags: ['type', 'schema', name],
+  };
 
   // Deep clone fields to guarantee isolation across custom types and node definitions
   const fields = customType.fields.map((f) => ({
@@ -32,6 +37,7 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     category: 'Object',
     kind: 'pure',
     description: `各フィールド値から ${name} 型のオブジェクトを構築する純粋関数`,
+    catalog,
     inputs: fields.map((f) => ({
       id: f.name,
       name: f.name,
@@ -67,6 +73,7 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     category: 'Object',
     kind: 'pure',
     description: `${name} 型のオブジェクトからプロパティを分解・抽出する純粋関数`,
+    catalog,
     inputs: [
       {
         id: 'instance',
@@ -102,6 +109,7 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     category: 'Logic',
     kind: 'pure',
     description: `データが ${name} 型のスキーマ要件を満たしているか検証する純粋関数`,
+    catalog,
     inputs: [
       {
         id: 'data',
@@ -148,6 +156,7 @@ export const INITIAL_CUSTOM_TYPES: CustomTypeDefinition[] = [
     name: 'User',
     color: '#ec4899', // pink-500
     description: 'ユーザーアカウント情報（ID・氏名・メール・アクティブ状態）',
+    catalogSource: 'example',
     fields: [
       { name: 'id', type: 'number', required: true, defaultValue: 2026 },
       { name: 'name', type: 'string', required: true, defaultValue: 'Yamada Kenji' },
@@ -160,6 +169,7 @@ export const INITIAL_CUSTOM_TYPES: CustomTypeDefinition[] = [
     name: 'Point2D',
     color: '#06b6d4', // cyan-500
     description: '2次元座標 (x, y)',
+    catalogSource: 'example',
     fields: [
       { name: 'x', type: 'number', required: true, defaultValue: 25 },
       { name: 'y', type: 'number', required: true, defaultValue: 50 },

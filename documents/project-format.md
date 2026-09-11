@@ -2,13 +2,13 @@
 
 ## 概要
 
-プロジェクトは UTF-8 の JSON ファイルとして保存されます。現行バージョンは `1.0.0` です。保存ファイル名は `moduloom-graph-YYYY-MM-DD.json` です。
+プロジェクトは UTF-8 の JSON ファイルとして保存されます。現行バージョンは `1.1.0` です。保存ファイル名は `moduloom-graph-YYYY-MM-DD.json` です。
 
 ## トップレベル構造
 
 ```ts
 interface FlowProjectExport {
-  version: '1.0.0';
+  version: '1.0.0' | '1.1.0';
   appName: string;
   exportedAt: string;
   nodes: NodeInstance[];
@@ -28,7 +28,7 @@ type SerializedNodeDefinition = Omit<NodeDefinition, 'evaluate' | 'codegen'>;
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "appName": "ModuLoom Project",
   "exportedAt": "2026-09-07T08:00:00.000Z",
   "nodes": [
@@ -99,6 +99,7 @@ interface CustomTypeDefinition {
   name: string;
   color: string;
   description?: string;
+  catalogSource?: 'example' | 'project';
   fields: Array<{
     name: string;
     type: BuiltinDataType;
@@ -109,11 +110,16 @@ interface CustomTypeDefinition {
 ```
 
 読み込み後、各カスタム型から Constructor／Deconstruct／Validate の3ノードが動的に生成されます。
+`catalogSource` はノードライブラリの Examples / Project 分類を保持する任意項目です。省略された
+旧ファイルのカスタム型は Project として扱います。
 
 ## customDefinitions
 
 自作ノードと複合ノードを格納します。保存時は共通シリアライザーが
 `NodeDefinition` の `evaluate` と `codegen` を明示的に除外します。
+
+任意の `catalog`（`level`、`source`、`searchTags`）は保存・復元します。分類情報のない既存の
+自作・複合ノードはノードライブラリで Project に分類されます。
 
 - 自作ノード: `customCode` の構文をAcornで、禁止APIを製品ポリシーとして同期検証し、Web Worker内で実行して先頭の出力ポートへ結果を返す非同期評価関数を復元する
 - 複合ノード: `compositeSubgraph` を評価エンジンが直接実行するため、JSON読み込み後も評価可能

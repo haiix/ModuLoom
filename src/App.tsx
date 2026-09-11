@@ -946,7 +946,10 @@ function EditorApp({
       const idx = prev.findIndex((t) => t.id === newType.id);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = newType;
+        next[idx] = {
+          ...newType,
+          ...(prev[idx].catalogSource ? { catalogSource: prev[idx].catalogSource } : {}),
+        };
         return next;
       }
       return [...prev, newType];
