@@ -62,6 +62,8 @@ describe('project serialization', () => {
     const documentWithUiState = Object.assign(createDocument(), {
       isLibraryOpen: true,
       onboardingStatus: 'completed',
+      evaluation: { double: { outputs: { result: 24 } } },
+      editorHistory: { past: [createDocument()], future: [] },
     });
     const project = serializeFlowProject({
       document: documentWithUiState,
@@ -71,6 +73,8 @@ describe('project serialization', () => {
 
     expect(project).not.toHaveProperty('isLibraryOpen');
     expect(project).not.toHaveProperty('onboardingStatus');
+    expect(project).not.toHaveProperty('evaluation');
+    expect(project).not.toHaveProperty('editorHistory');
   });
 
   it('未対応のstorageVersionをプロジェクト適用前に拒否する', () => {
