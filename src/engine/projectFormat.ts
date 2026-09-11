@@ -196,12 +196,19 @@ function parseCustomType(value: unknown, path: string): CustomTypeDefinition {
     }
     fieldNames.add(field.name);
   }
+  const catalogSource = optionalString(customType.catalogSource, `${path}.catalogSource`);
+  if (catalogSource !== undefined && !['example', 'project'].includes(catalogSource)) {
+    fail(`${path}.catalogSource`, "'example' または 'project' である必要があります。");
+  }
 
   return {
     id: expectString(customType.id, `${path}.id`),
     name: expectString(customType.name, `${path}.name`),
     color: expectString(customType.color, `${path}.color`),
     description: optionalText(customType.description, `${path}.description`),
+    ...(catalogSource !== undefined
+      ? { catalogSource: catalogSource as NonNullable<CustomTypeDefinition['catalogSource']> }
+      : {}),
     fields,
   };
 }
@@ -214,6 +221,32 @@ function parseCustomDefinition(value: unknown, path: string): NodeDefinition {
   if (!NODE_CATEGORIES.has(category))
     fail(`${path}.category`, `未対応のカテゴリ '${category}' です。`);
   if (!NODE_KINDS.has(kind)) fail(`${path}.kind`, `未対応の kind '${kind}' です。`);
+
+  const catalog =
+    definition.catalog === undefined
+      ? undefined
+      : (() => {
+          const value = expectRecord(definition.catalog, `${path}.catalog`);
+          const level = expectString(value.level, `${path}.catalog.level`);
+          const source = expectString(value.source, `${path}.catalog.source`);
+          if (!['core', 'advanced'].includes(level)) {
+            fail(`${path}.catalog.level`, "'core' または 'advanced' である必要があります。");
+          }
+          if (!['builtin', 'example', 'project'].includes(source)) {
+            fail(
+              `${path}.catalog.source`,
+              "'builtin'、'example'、'project' のいずれかである必要があります。",
+            );
+          }
+          const searchTags = expectArray(value.searchTags, `${path}.catalog.searchTags`).map(
+            (tag, index) => expectString(tag, `${path}.catalog.searchTags[${index}]`),
+          );
+          return {
+            level: level as NonNullable<NodeDefinition['catalog']>['level'],
+            source: source as NonNullable<NodeDefinition['catalog']>['source'],
+            searchTags,
+          };
+        })();
 
   const inputs = expectArray(definition.inputs, `${path}.inputs`).map((port, index) =>
     parsePort(port, `${path}.inputs[${index}]`),
@@ -330,6 +363,7 @@ function parseCustomDefinition(value: unknown, path: string): NodeDefinition {
             };
           })(),
         }),
+    ...(catalog !== undefined ? { catalog } : {}),
     ...(customCode ? { customCode } : {}),
     ...(isAsync || customCode ? { isAsync: true } : {}),
     ...(isComposite ? { isComposite: true, compositeSubgraph } : {}),

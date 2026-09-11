@@ -31,6 +31,47 @@ function createDocument(): EditorDocument {
 }
 
 describe('project serialization', () => {
+  it('カタログ分類メタデータを保存して復元する', () => {
+    const document = createDocument();
+    document.customTypes = [
+      {
+        id: 'ExampleType',
+        name: 'ExampleType',
+        color: '#123456',
+        catalogSource: 'example',
+        fields: [{ name: 'value', type: 'number' }],
+      },
+    ];
+    document.customDefinitions[0] = {
+      ...document.customDefinitions[0],
+      catalog: {
+        level: 'advanced',
+        source: 'project',
+        searchTags: ['double', 'multiply'],
+      },
+    };
+
+    const project = serializeFlowProject({
+      document,
+      viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+      exportedAt: '2026-09-11T00:00:00.000Z',
+    });
+    const snapshot = createRecoverySnapshot(project, {
+      updatedAt: '2026-09-11T00:01:00.000Z',
+      revision: 1,
+      writerId: 'tab-a',
+      wasDirty: false,
+    });
+    const restored = parseRecoverySnapshot(JSON.parse(JSON.stringify(snapshot)));
+
+    expect(restored.project.customTypes?.[0].catalogSource).toBe('example');
+    expect(restored.project.customDefinitions?.[0].catalog).toEqual({
+      level: 'advanced',
+      source: 'project',
+      searchTags: ['double', 'multiply'],
+    });
+  });
+
   it('実行時関数を明示的に除外し、既存の検証経路で往復できる', () => {
     const project = serializeFlowProject({
       document: createDocument(),
