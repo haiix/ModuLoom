@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_NODES } from '../src/nodes/definitions';
-import { generateNodesForCustomType, INITIAL_CUSTOM_TYPES } from '../src/nodes/customTypeNodes';
+import { EXAMPLE_CUSTOM_TYPES, generateNodesForCustomType } from '../src/nodes/customTypeNodes';
 import {
   getNodeCatalogMetadata,
   getNodeCatalogSection,
@@ -23,7 +23,7 @@ describe('node catalog', () => {
   });
 
   it('keeps bundled custom types in Examples and new types in Project', () => {
-    const exampleNodes = INITIAL_CUSTOM_TYPES.flatMap(generateNodesForCustomType);
+    const exampleNodes = EXAMPLE_CUSTOM_TYPES.flatMap(generateNodesForCustomType);
     expect(exampleNodes).toHaveLength(6);
     expect(
       exampleNodes.every((definition) => getNodeCatalogSection(definition) === 'examples'),

@@ -15,7 +15,7 @@ import {
   evaluateGraph,
   generateTypeScriptCode,
 } from '../src/engine/dagEngine';
-import { generateNodesForCustomType, INITIAL_CUSTOM_TYPES } from '../src/nodes/customTypeNodes';
+import { EXAMPLE_CUSTOM_TYPES, generateNodesForCustomType } from '../src/nodes/customTypeNodes';
 import { BUILTIN_NODES, PRESETS } from '../src/nodes/definitions';
 import type { Connection, NodeDefinition, NodeInstance } from '../src/types';
 
@@ -454,7 +454,7 @@ describe('runtime / TypeScript output parity', () => {
   it('カスタム型ノードも生成コードとランタイムで一致し型検査を通る', () => {
     const preset = PRESETS.find(({ id }) => id === 'custom-type-pipeline')!;
     const definitions = new Map(builtins);
-    for (const customType of INITIAL_CUSTOM_TYPES) {
+    for (const customType of EXAMPLE_CUSTOM_TYPES) {
       for (const definition of generateNodesForCustomType(customType)) {
         definitions.set(definition.typeId, definition);
       }
@@ -464,7 +464,7 @@ describe('runtime / TypeScript output parity', () => {
       preset.nodes,
       preset.connections,
       definitions,
-      INITIAL_CUSTOM_TYPES,
+      EXAMPLE_CUSTOM_TYPES,
     );
     const generated = compilePipeline(code)() as Record<string, unknown>;
     const expected = preset.nodes

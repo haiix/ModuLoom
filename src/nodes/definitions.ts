@@ -2,6 +2,7 @@ import { NodeDefinition, GraphPreset } from '../types';
 import { ASYNC_STREAM_NODES } from './asyncStreamNodes';
 import { BUILTIN_NODE_CODEGEN } from './codegen';
 import { getBuiltinCatalogMetadata } from './nodeCatalog';
+import { EXAMPLE_CUSTOM_TYPES } from './customTypeNodes';
 
 const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
   ...ASYNC_STREAM_NODES,
@@ -841,6 +842,10 @@ export const PRESETS: GraphPreset[] = [
     id: 'math-calc',
     title: '四則演算パイプライン (A * B + C)',
     description: 'スライダー入力から掛け算・足し算を連鎖させ、メーターとインスペクタで結果を確認',
+    difficulty: 'beginner',
+    tags: ['Math', 'Input', 'Output'],
+    learningGoals: ['数値入力を演算ノードへ接続する', '1つの結果を複数の出力へ分岐する'],
+    expectedResult: '12 × 8 + 15 = 111 をインスペクタとメーターへ表示',
     nodes: [
       {
         id: 'n-slider-a',
@@ -909,6 +914,10 @@ export const PRESETS: GraphPreset[] = [
     id: 'string-template',
     title: '動的文字列テンプレート生成',
     description: '入力文字列をテンプレートに流し込み、大文字変換してフォーマット結果を出力',
+    difficulty: 'beginner',
+    tags: ['String', 'Template', 'Output'],
+    learningGoals: ['文字列をテンプレートへ差し込む', '同じ文字列を変換と長さ取得へ分岐する'],
+    expectedResult: '名前とプロジェクト名を含む大文字メッセージと文字数を表示',
     nodes: [
       {
         id: 'n-txt-name',
@@ -987,6 +996,10 @@ export const PRESETS: GraphPreset[] = [
     id: 'logic-validator',
     title: '年齢チェック・条件分岐ロジック',
     description: '入力数値を比較判定し、三項条件分岐でステータスメッセージを切り替え',
+    difficulty: 'beginner',
+    tags: ['Logic', 'Branch', 'Validation'],
+    learningGoals: ['比較結果を条件分岐へ渡す', '真偽値をステータスとして可視化する'],
+    expectedResult: '年齢21を成人として判定し、許可メッセージを表示',
     nodes: [
       {
         id: 'n-age',
@@ -1058,6 +1071,10 @@ export const PRESETS: GraphPreset[] = [
     id: 'array-pipeline',
     title: '配列データ変換パイプライン',
     description: '数値配列から正の数を抽出(Filter)し、2倍に変換(Map)した後に合計(Sum)を算出',
+    difficulty: 'intermediate',
+    tags: ['Array', 'Filter', 'Map', 'Math'],
+    learningGoals: ['配列のfilter・map・集約を連結する', '変換結果を数値と文字列で確認する'],
+    expectedResult: '正数 [15, 24, 50] を2倍にし、合計178とCSVを表示',
     nodes: [
       {
         id: 'n-arr-input',
@@ -1138,6 +1155,11 @@ export const PRESETS: GraphPreset[] = [
     title: 'カスタム型 (User) 生成・検証・分解パイプライン',
     description:
       'プリミティブ入力値から User 型オブジェクトを生成(Constructor)し、分解(Deconstruct)して個別取得',
+    difficulty: 'intermediate',
+    tags: ['Custom Type', 'Object', 'Validation'],
+    learningGoals: ['カスタム型を生成・検証する', '型付きオブジェクトをフィールドへ分解する'],
+    expectedResult: 'User オブジェクトが検証を通り、氏名とメールを表示',
+    dependencies: { customTypes: [EXAMPLE_CUSTOM_TYPES[0]] },
     nodes: [
       {
         id: 'n-uid',
@@ -1304,6 +1326,10 @@ export const PRESETS: GraphPreset[] = [
     title: '非同期Promise & API取得パイプライン',
     description:
       '非同期APIリクエスト(Simulated Fetch)を行い、Promiseを待機(Await)してデータを分解・表示',
+    difficulty: 'advanced',
+    tags: ['Async', 'Promise', 'Simulated API'],
+    learningGoals: ['Promiseを生成して待機する', '非同期結果からプロパティを取り出す'],
+    expectedResult: '疑似APIレスポンスと metrics を待機後に表示',
     nodes: [
       {
         id: 'np-fetch',
@@ -1373,6 +1399,10 @@ export const PRESETS: GraphPreset[] = [
     title: 'AsyncIterator リアルタイムストリーム処理',
     description:
       'Intervalストリーム(0,1,2..)から流れるデータを偶数フィルタし、2倍変換して配列にリアルタイム集約',
+    difficulty: 'advanced',
+    tags: ['Stream', 'AsyncIterator', 'Filter', 'Map'],
+    learningGoals: ['ストリームをfilter・mapで変換する', '有限ストリームを配列へ集約する'],
+    expectedResult: '0〜9の偶数を10倍した [0, 20, 40, 60, 80] を表示',
     nodes: [
       {
         id: 'ns-interval',
@@ -1457,6 +1487,11 @@ export const PRESETS: GraphPreset[] = [
     title: '複合ノード作成サンプル: 2Dベクトル長 (sqrt(x^2 + y^2))',
     description:
       '2つの「グループ入力端子(x, y)」から乗算・加算・平方根を経て「グループ出力端子(length)」へ繋ぐ回路。「複合ノード化」ですぐに1つの関数にまとめられます！',
+    difficulty: 'advanced',
+    tags: ['Composite', 'Math', 'Point2D'],
+    learningGoals: ['入出力端子で複合ノードの境界を定義する', 'Point2D型の教材定義を確認する'],
+    expectedResult: '入力3と4からベクトル長5を計算し、複合ノード化できる状態にする',
+    dependencies: { customTypes: [EXAMPLE_CUSTOM_TYPES[1]] },
     nodes: [
       {
         id: 'nc-in-x',
@@ -1474,24 +1509,83 @@ export const PRESETS: GraphPreset[] = [
         state: { portName: 'y', portType: 'number', testValue: 4 },
         customLabel: '入力端子: y',
       },
-      { id: 'nc-sq-x', typeId: 'math/multiply', x: 400, y: 140, customLabel: 'x^2' },
-      { id: 'nc-sq-y', typeId: 'math/multiply', x: 400, y: 340, customLabel: 'y^2' },
-      { id: 'nc-add', typeId: 'math/add', x: 700, y: 240, customLabel: 'x^2 + y^2' },
-      { id: 'nc-sqrt', typeId: 'math/sqrt', x: 960, y: 240, customLabel: 'sqrt(x^2 + y^2)' },
+      {
+        id: 'nc-point-ctor',
+        typeId: 'type/Point2D/constructor',
+        x: 340,
+        y: 240,
+        customLabel: 'Point2D 生成',
+      },
+      {
+        id: 'nc-point-deconstruct',
+        typeId: 'type/Point2D/deconstruct',
+        x: 600,
+        y: 240,
+        customLabel: 'Point2D 分解',
+      },
+      { id: 'nc-sq-x', typeId: 'math/multiply', x: 880, y: 140, customLabel: 'x^2' },
+      { id: 'nc-sq-y', typeId: 'math/multiply', x: 880, y: 340, customLabel: 'y^2' },
+      { id: 'nc-add', typeId: 'math/add', x: 1160, y: 240, customLabel: 'x^2 + y^2' },
+      { id: 'nc-sqrt', typeId: 'math/sqrt', x: 1420, y: 240, customLabel: 'sqrt(x^2 + y^2)' },
       {
         id: 'nc-out',
         typeId: 'composite/output-port',
-        x: 1240,
+        x: 1680,
         y: 240,
         state: { portName: 'length', portType: 'number' },
         customLabel: '出力端子: length',
       },
     ],
     connections: [
-      { id: 'cc1', fromNodeId: 'nc-in-x', fromPortId: 'out', toNodeId: 'nc-sq-x', toPortId: 'a' },
-      { id: 'cc2', fromNodeId: 'nc-in-x', fromPortId: 'out', toNodeId: 'nc-sq-x', toPortId: 'b' },
-      { id: 'cc3', fromNodeId: 'nc-in-y', fromPortId: 'out', toNodeId: 'nc-sq-y', toPortId: 'a' },
-      { id: 'cc4', fromNodeId: 'nc-in-y', fromPortId: 'out', toNodeId: 'nc-sq-y', toPortId: 'b' },
+      {
+        id: 'cc1',
+        fromNodeId: 'nc-in-x',
+        fromPortId: 'out',
+        toNodeId: 'nc-point-ctor',
+        toPortId: 'x',
+      },
+      {
+        id: 'cc2',
+        fromNodeId: 'nc-in-y',
+        fromPortId: 'out',
+        toNodeId: 'nc-point-ctor',
+        toPortId: 'y',
+      },
+      {
+        id: 'cc3',
+        fromNodeId: 'nc-point-ctor',
+        fromPortId: 'instance',
+        toNodeId: 'nc-point-deconstruct',
+        toPortId: 'instance',
+      },
+      {
+        id: 'cc4',
+        fromNodeId: 'nc-point-deconstruct',
+        fromPortId: 'x',
+        toNodeId: 'nc-sq-x',
+        toPortId: 'a',
+      },
+      {
+        id: 'cc4b',
+        fromNodeId: 'nc-point-deconstruct',
+        fromPortId: 'x',
+        toNodeId: 'nc-sq-x',
+        toPortId: 'b',
+      },
+      {
+        id: 'cc4c',
+        fromNodeId: 'nc-point-deconstruct',
+        fromPortId: 'y',
+        toNodeId: 'nc-sq-y',
+        toPortId: 'a',
+      },
+      {
+        id: 'cc4d',
+        fromNodeId: 'nc-point-deconstruct',
+        fromPortId: 'y',
+        toNodeId: 'nc-sq-y',
+        toPortId: 'b',
+      },
       { id: 'cc5', fromNodeId: 'nc-sq-x', fromPortId: 'result', toNodeId: 'nc-add', toPortId: 'a' },
       { id: 'cc6', fromNodeId: 'nc-sq-y', fromPortId: 'result', toNodeId: 'nc-add', toPortId: 'b' },
       {
@@ -1515,6 +1609,10 @@ export const PRESETS: GraphPreset[] = [
     title: '部分適用サンプル: 10倍カスタム関数 (Partial Application)',
     description:
       'グループ入力端子(x)と固定値10のNumber Inputを乗算ノードへ接続。「複合ノード化」を行うとフォーム値10が内部に固定（部分適用）され、引数xを10倍するカスタム関数が生成されます。',
+    difficulty: 'advanced',
+    tags: ['Composite', 'Partial Application', 'Math'],
+    learningGoals: ['固定入力を複合ノードへ閉じ込める', '公開引数と内部定数を区別する'],
+    expectedResult: '外部引数xだけを持つ10倍関数として複合ノード化できる状態にする',
     nodes: [
       {
         id: 'np-in-x',

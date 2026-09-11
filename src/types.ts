@@ -155,6 +155,14 @@ export interface GraphPreset {
   id: string;
   title: string;
   description: string;
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  tags: string[];
+  learningGoals: string[];
+  expectedResult: string;
+  dependencies?: {
+    customTypes?: CustomTypeDefinition[];
+    customDefinitions?: NodeDefinition[];
+  };
   nodes: NodeInstance[];
   connections: Connection[];
 }

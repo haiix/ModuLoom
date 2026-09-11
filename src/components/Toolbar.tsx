@@ -17,13 +17,12 @@ import {
   Undo2,
   Upload,
 } from 'lucide-react';
-import { PRESETS } from '../nodes/definitions';
 import { DataType, type CustomTypeDefinition, getTypeStyle } from '../types';
 import { getToolbarPresentation } from './toolbarLayout';
 import type { DebouncedSaveStatus } from '../engine/debouncedSave';
 
 interface ToolbarProps {
-  onSelectPreset: (id: string) => void;
+  onOpenPresetGallery: () => void;
   onClearGraph: () => void;
   onOpenLibrary: () => void;
   onOpenCustomTypeModal: () => void;
@@ -50,7 +49,7 @@ const primaryBase =
 const primary = `${primaryBase} border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800`;
 
 export const Toolbar: React.FC<ToolbarProps> = ({
-  onSelectPreset,
+  onOpenPresetGallery,
   onClearGraph,
   onOpenLibrary,
   onOpenCustomTypeModal,
@@ -119,7 +118,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     action();
   };
   return (
-    <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-2 overflow-visible border-b border-slate-200 bg-white/95 px-2 shadow-xs backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 sm:px-3">
+    <header className="fixed inset-x-0 top-0 z-[60] flex h-14 items-center gap-2 overflow-visible border-b border-slate-200 bg-white/95 px-2 shadow-xs backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 sm:px-3">
       <div className="flex min-w-0 shrink items-center gap-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
           <GitCommit className="h-5 w-5 rotate-90" aria-hidden="true" />
@@ -223,29 +222,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             aria-label="その他の操作"
             className="absolute right-0 top-full mt-2 max-h-[calc(100vh-5rem)] w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
-            <label className="mb-2 block px-2 text-[11px] font-semibold text-slate-500">
-              <span className="mb-1 flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                プリセット
-              </span>
-              <select
-                aria-label="プリセットを選択"
-                className="w-full rounded-md border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-800"
-                defaultValue=""
-                onChange={(event) => {
-                  if (event.target.value) closeAndRun(() => onSelectPreset(event.target.value));
-                }}
-              >
-                <option value="" disabled>
-                  選択してください
-                </option>
-                {PRESETS.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <MenuButton
+              icon={<Sparkles />}
+              label="サンプルギャラリー"
+              onClick={() => closeAndRun(onOpenPresetGallery)}
+            />
             <MenuButton
               icon={<Boxes />}
               label={`カスタム型 (${customTypes.length})`}

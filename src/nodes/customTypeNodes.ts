@@ -148,9 +148,9 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
 }
 
 /**
- * Initial sample custom types
+ * Custom types bundled as dependencies of educational samples.
  */
-export const INITIAL_CUSTOM_TYPES: CustomTypeDefinition[] = [
+export const EXAMPLE_CUSTOM_TYPES: CustomTypeDefinition[] = [
   {
     id: 'User',
     name: 'User',

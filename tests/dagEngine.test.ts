@@ -11,6 +11,7 @@ import {
   wouldCreateCycle,
 } from '../src/engine/dagEngine';
 import { BUILTIN_NODES, PRESETS } from '../src/nodes/definitions';
+import { generateNodesForCustomType } from '../src/nodes/customTypeNodes';
 import type { Connection, NodeDefinition, NodeInstance } from '../src/types';
 
 const nodes: NodeInstance[] = [
@@ -35,6 +36,17 @@ const connections: Connection[] = [
     toPortId: 'b',
   },
 ];
+
+function definitionsForPreset(preset: (typeof PRESETS)[number]) {
+  const definitions = [...BUILTIN_NODES];
+  for (const customType of preset.dependencies?.customTypes ?? []) {
+    definitions.push(...generateNodesForCustomType(customType));
+  }
+  for (const definition of preset.dependencies?.customDefinitions ?? []) {
+    definitions.push(definition);
+  }
+  return new Map(definitions.map((definition) => [definition.typeId, definition]));
+}
 
 const definitions = new Map<string, NodeDefinition>([
   [
@@ -140,10 +152,9 @@ describe('evaluateGraph', () => {
 
   it('2Dベクトル長プリセットで3と4から5を計算する', () => {
     const preset = PRESETS.find(({ id }) => id === 'composite-vector-length');
-    const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
 
     expect(preset).toBeDefined();
-    const result = evaluateGraph(preset!.nodes, preset!.connections, builtins);
+    const result = evaluateGraph(preset!.nodes, preset!.connections, definitionsForPreset(preset!));
 
     expect(result['nc-sqrt'].outputs.result).toBe(5);
     expect(result['nc-out'].outputs.length).toBe(5);
@@ -221,10 +232,14 @@ describe('generateTypeScriptCode', () => {
 
   it('2Dベクトル長プリセットと同じ結果を生成コードでも返す', () => {
     const preset = PRESETS.find(({ id }) => id === 'composite-vector-length');
-    const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
 
     expect(preset).toBeDefined();
-    const code = generateTypeScriptCode(preset!.nodes, preset!.connections, builtins);
+    const code = generateTypeScriptCode(
+      preset!.nodes,
+      preset!.connections,
+      definitionsForPreset(preset!),
+      preset!.dependencies?.customTypes,
+    );
     const evaluatePipeline = compileGeneratedPipeline(code);
 
     expect(Object.values(evaluatePipeline())).toEqual([5]);
