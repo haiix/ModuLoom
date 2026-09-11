@@ -45,7 +45,11 @@ import {
   loadRecoverySnapshot,
   saveRecoverySnapshot,
 } from './engine/recoveryStorage';
-import { DebouncedSave } from './engine/debouncedSave';
+import {
+  DebouncedSave,
+  shouldWarnBeforeUnload,
+  type DebouncedSaveStatus,
+} from './engine/debouncedSave';
 import {
   createProjectCodeFingerprint,
   recoverySnapshotHasTrustedCode,
@@ -320,6 +324,10 @@ function EditorApp({
     initialProject?.viewport?.pan ?? { x: 0, y: 0 },
   );
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const [browserSaveStatus, setBrowserSaveStatus] = useState<DebouncedSaveStatus>(
+    initialSnapshot ? 'saved' : 'idle',
+  );
+  const [showRecoveryNotice, setShowRecoveryNotice] = useState(Boolean(initialSnapshot));
   const revisionRef = useRef(initialSnapshot?.revision ?? 0);
   const initialAutosaveRenderRef = useRef(true);
   const saveSchedulerRef = useRef<DebouncedSave<RecoverySaveInput> | null>(null);
@@ -348,6 +356,7 @@ function EditorApp({
           setAutosaveError(
             error instanceof Error ? error.message : 'プロジェクトを自動保存できませんでした。',
           ),
+        onStatusChange: setBrowserSaveStatus,
       },
     );
   }
@@ -799,6 +808,7 @@ function EditorApp({
   };
 
   const handleClearGraph = () => {
+    if (!window.confirm('キャンバス上のノードと接続をすべて削除しますか？')) return;
     prevGraphSnapshotRef.current = { nodes: [], connections: [] };
     updateEditorDocument((document) => ({ ...document, nodes: [], connections: [] }));
     executionDebuggerRef.current?.cancel();
@@ -806,6 +816,36 @@ function EditorApp({
     setDebugSnapshot(null);
     setEvaluation({});
     setEvalStats({ dirtyCount: 0, totalCount: 0, lastDirtyNodeIds: [] });
+  };
+
+  const handleDiscardRestoredWork = async () => {
+    if (!window.confirm('復元した内容を破棄して新しいプロジェクトを開始しますか？')) return;
+    await saveSchedulerRef.current?.flush();
+    saveSchedulerRef.current?.dispose();
+    try {
+      await discardRecoverySnapshot();
+    } catch (error) {
+      setAutosaveError(
+        error instanceof Error ? error.message : '復元データを破棄できませんでした。',
+      );
+      setBrowserSaveStatus('error');
+      return;
+    }
+    prevGraphSnapshotRef.current = { nodes: [], connections: [] };
+    setEditorHistory(
+      createEditorHistory({
+        nodes: [],
+        connections: [],
+        customDefinitions: [],
+        customTypes: INITIAL_CUSTOM_TYPES,
+      }),
+    );
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setSelectedNodeIds(new Set());
+    setEvaluation({});
+    setShowRecoveryNotice(false);
+    setBrowserSaveStatus('idle');
   };
 
   const handleSaveCustomNode = (customDef: NodeDefinition) => {
@@ -1246,14 +1286,14 @@ function EditorApp({
   }, []);
 
   useEffect(() => {
-    if (!isDirty) return;
+    if (!shouldWarnBeforeUnload(browserSaveStatus)) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty]);
+  }, [browserSaveStatus]);
 
   // Project and history shortcuts. Form controls retain their native undo/redo behavior.
   useEffect(() => {
@@ -1415,6 +1455,7 @@ function EditorApp({
         canUndo={editorHistory.past.length > 0}
         canRedo={editorHistory.future.length > 0}
         isDirty={isDirty}
+        browserSaveStatus={browserSaveStatus}
         onUndo={handleUndo}
         onRedo={handleRedo}
         customTypes={customTypes}
@@ -1426,9 +1467,33 @@ function EditorApp({
         nodeCount={nodes.length}
       />
 
+      {showRecoveryNotice && (
+        <aside
+          aria-label="復元したプロジェクト"
+          className="fixed left-1/2 top-16 z-40 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs text-emerald-900 shadow-lg dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+        >
+          <span>前回の編集状態を復元しました。</span>
+          <button
+            type="button"
+            className="rounded border border-emerald-500 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            onClick={() => void handleDiscardRestoredWork()}
+          >
+            破棄して新規作成
+          </button>
+          <button
+            type="button"
+            aria-label="復元通知を閉じる"
+            className="rounded px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            onClick={() => setShowRecoveryNotice(false)}
+          >
+            ×
+          </button>
+        </aside>
+      )}
+
       {(recoveryWarning || autosaveError) && (
         <div
-          role="status"
+          role="alert"
           className="fixed right-4 top-16 z-40 max-w-md rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 shadow-lg dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
         >
           <p>{recoveryWarning ?? autosaveError}</p>

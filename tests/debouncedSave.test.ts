@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DebouncedSave } from '../src/engine/debouncedSave';
+import { DebouncedSave, shouldWarnBeforeUnload } from '../src/engine/debouncedSave';
 
 describe('DebouncedSave', () => {
   afterEach(() => vi.useRealTimers());
+
+  it('未反映または失敗状態だけ離脱警告の対象にする', () => {
+    expect(shouldWarnBeforeUnload('idle')).toBe(false);
+    expect(shouldWarnBeforeUnload('saved')).toBe(false);
+    expect(shouldWarnBeforeUnload('pending')).toBe(true);
+    expect(shouldWarnBeforeUnload('saving')).toBe(true);
+    expect(shouldWarnBeforeUnload('error')).toBe(true);
+  });
 
   it('最後の変更をデバウンス後に保存する', async () => {
     vi.useFakeTimers();
@@ -47,10 +55,12 @@ describe('DebouncedSave', () => {
     const error = new Error('quota exceeded');
     const save = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
     const onError = vi.fn();
+    const statuses: string[] = [];
     const scheduler = new DebouncedSave<number>(save, {
       delayMs: 400,
       maxWaitMs: 2_000,
       onError,
+      onStatusChange: (status) => statuses.push(status),
     });
 
     scheduler.schedule(1);
@@ -60,5 +70,32 @@ describe('DebouncedSave', () => {
 
     expect(onError).toHaveBeenCalledWith(error);
     expect(save).toHaveBeenCalledTimes(2);
+    expect(statuses).toContain('error');
+    expect(statuses.at(-1)).toBe('saved');
+  });
+
+  it('待機・保存中・保存済みの状態を通知する', async () => {
+    const statuses: string[] = [];
+    let finishSave: (() => void) | undefined;
+    const scheduler = new DebouncedSave<number>(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+      {
+        delayMs: 400,
+        maxWaitMs: 2_000,
+        onError: vi.fn(),
+        onStatusChange: (status) => statuses.push(status),
+      },
+    );
+
+    scheduler.schedule(1);
+    const saving = scheduler.flush();
+    await vi.waitFor(() => expect(statuses).toContain('saving'));
+    finishSave?.();
+    await saving;
+
+    expect(statuses).toEqual(['pending', 'saving', 'saved']);
   });
 });
