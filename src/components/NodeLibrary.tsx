@@ -1,6 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NodeDefinition, CustomTypeDefinition, getTypeStyle } from '../types';
 import { getNodeCatalogSection, matchesNodeCatalogSearch } from '../nodes/nodeCatalog';
+import {
+  NODE_PALETTE_STORAGE_KEY,
+  parseNodePalettePreferences,
+  recordRecentNode,
+  togglePinnedNode,
+} from './browserPreferences';
+import {
+  getCompatibleDefinitions,
+  getProjectDefinitions,
+  getUsedDefinitions,
+  resolveDefinitions,
+  type SelectedPort,
+} from './nodeLibraryModel';
 import {
   Search,
   Plus,
@@ -19,6 +32,11 @@ import {
   Zap,
   Activity,
   Layers,
+  Star,
+  Clock3,
+  Workflow,
+  Cable,
+  X,
 } from 'lucide-react';
 
 interface NodeLibraryProps {
@@ -30,6 +48,9 @@ interface NodeLibraryProps {
   onOpenCreateCompositeModal?: () => void;
   isOpen: boolean;
   onToggleOpen: () => void;
+  nodeTypeIds?: string[];
+  selectedPort?: SelectedPort | null;
+  onClearSelectedPort?: () => void;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -77,8 +98,19 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
   onOpenCreateCompositeModal,
   isOpen,
   onToggleOpen,
+  nodeTypeIds = [],
+  selectedPort = null,
+  onClearSelectedPort,
 }) => {
   const [search, setSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [preferences, setPreferences] = useState(() => {
+    try {
+      return parseNodePalettePreferences(window.localStorage.getItem(NODE_PALETTE_STORAGE_KEY));
+    } catch {
+      return parseNodePalettePreferences(null);
+    }
+  });
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     advanced: true,
@@ -90,13 +122,121 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
   );
 
   const hasSearch = Boolean(search.trim());
+  const pinnedDefinitions = useMemo(
+    () => resolveDefinitions(definitions, preferences.pinnedTypeIds),
+    [definitions, preferences.pinnedTypeIds],
+  );
+  const recentDefinitions = useMemo(
+    () => resolveDefinitions(definitions, preferences.recentTypeIds),
+    [definitions, preferences.recentTypeIds],
+  );
+  const usedDefinitions = useMemo(
+    () => getUsedDefinitions(definitions, nodeTypeIds),
+    [definitions, nodeTypeIds],
+  );
+  const projectDefinitions = useMemo(() => getProjectDefinitions(definitions), [definitions]);
+  const compatibleDefinitions = useMemo(
+    () =>
+      selectedPort
+        ? getCompatibleDefinitions(definitions, selectedPort, customTypes).slice(0, 12)
+        : [],
+    [customTypes, definitions, selectedPort],
+  );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NODE_PALETTE_STORAGE_KEY, JSON.stringify(preferences));
+    } catch {
+      // Browser preferences are optional; the catalog remains fully available.
+    }
+  }, [preferences]);
+
+  useEffect(() => {
+    const handleQuickAdd = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.key !== '/') return;
+      event.preventDefault();
+      if (!isOpen) onToggleOpen();
+      requestAnimationFrame(() => searchRef.current?.focus());
+    };
+    window.addEventListener('keydown', handleQuickAdd);
+    return () => window.removeEventListener('keydown', handleQuickAdd);
+  }, [isOpen, onToggleOpen]);
+
+  useEffect(() => {
+    if (selectedPort && isOpen) {
+      setSearch('');
+      requestAnimationFrame(() => searchRef.current?.focus());
+    }
+  }, [isOpen, selectedPort]);
+
+  const addNode = (typeId: string) => {
+    onAddNode(typeId);
+    setPreferences((previous) => recordRecentNode(previous, typeId));
+  };
+
+  const renderNodeRow = (definition: NodeDefinition) => {
+    const outType = definition.outputs[0]?.type || definition.inputs[0]?.type || 'any';
+    const isPinned = preferences.pinnedTypeIds.includes(definition.typeId);
+    return (
+      <div
+        key={definition.typeId}
+        className="group flex items-center rounded-lg bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-800/70 hover:border-indigo-300 dark:hover:border-indigo-700/60 transition"
+      >
+        <button
+          onClick={() => addNode(definition.typeId)}
+          aria-label={`${definition.label}をキャンバスに配置`}
+          className="min-w-0 flex-1 flex items-center justify-between p-2 text-left rounded-l-lg hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40"
+          title={`${definition.label}をキャンバスに配置`}
+        >
+          <span className="flex items-start gap-2 min-w-0">
+            <span
+              className="w-2.5 h-2.5 rounded-full mt-1 shrink-0"
+              style={{ backgroundColor: getTypeStyle(outType, customTypes).color }}
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">
+                {definition.label}
+              </span>
+              {definition.description && (
+                <span className="block text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {definition.description}
+                </span>
+              )}
+            </span>
+          </span>
+          <Plus className="w-3 h-3 shrink-0 ml-1.5 text-indigo-600 dark:text-indigo-400" />
+        </button>
+        <button
+          onClick={() =>
+            setPreferences((previous) => togglePinnedNode(previous, definition.typeId))
+          }
+          aria-label={`${definition.label}をパレット${isPinned ? 'から外す' : 'に追加'}`}
+          aria-pressed={isPinned}
+          className="self-stretch px-2 rounded-r-lg text-slate-400 hover:text-amber-500 focus-visible:text-amber-500"
+          title={isPinned ? 'パレットから外す' : 'パレットに追加'}
+        >
+          <Star className={`w-3.5 h-3.5 ${isPinned ? 'fill-amber-400 text-amber-500' : ''}`} />
+        </button>
+      </div>
+    );
+  };
+
+  const quickSections = [
+    { id: 'palette', label: 'パレット', icon: Star, items: pinnedDefinitions },
+    { id: 'recent', label: '最近使ったノード', icon: Clock3, items: recentDefinitions },
+    { id: 'used', label: 'このプロジェクトで使用中', icon: Workflow, items: usedDefinitions },
+    { id: 'project-only', label: 'このプロジェクト固有', icon: Boxes, items: projectDefinitions },
+  ];
 
   return (
     <div
       role="complementary"
       aria-label="ノードライブラリ"
-      className={`fixed top-16 left-4 z-40 flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl transition-all duration-200 overflow-hidden ${
-        isOpen ? 'w-80 max-h-[calc(100vh-5rem)]' : 'w-12 h-12'
+      className={`fixed top-16 left-2 right-2 sm:left-4 sm:right-auto z-40 flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl transition-all duration-200 overflow-hidden ${
+        isOpen ? 'w-auto sm:w-80 max-h-[calc(100vh-5rem)]' : 'right-auto w-12 h-12'
       }`}
     >
       <div className="flex items-center justify-between px-3.5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50">
@@ -147,6 +287,7 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
             <div className="relative flex items-center">
               <Search className="absolute left-2.5 w-3.5 h-3.5 text-slate-400" />
               <input
+                ref={searchRef}
                 type="text"
                 placeholder="ノードを検索 (例: add, API, debug)..."
                 aria-label="ノードを検索"
@@ -164,6 +305,63 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
           </div>
 
           <div className="p-2 overflow-y-auto space-y-2 flex-1 scrollbar-thin">
+            {!hasSearch && selectedPort && (
+              <section
+                aria-label="接続可能候補"
+                className="rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-950/20"
+              >
+                <div className="flex items-center justify-between px-2.5 py-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                      <Cable className="w-3.5 h-3.5" />
+                      接続可能候補 ({compatibleDefinitions.length})
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {selectedPort.name} ({selectedPort.type}) の
+                      {selectedPort.direction === 'output' ? '接続先' : '入力元'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={onClearSelectedPort}
+                    aria-label="接続可能候補を閉じる"
+                    className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="px-1.5 pb-1.5 space-y-1">
+                  {compatibleDefinitions.map(renderNodeRow)}
+                  {compatibleDefinitions.length === 0 && (
+                    <p className="px-2 pb-1 text-[11px] text-slate-500">互換ノードはありません。</p>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {!hasSearch &&
+              quickSections.map(({ id, label, icon: Icon, items }) => (
+                <section key={id} aria-labelledby={`node-library-${id}`}>
+                  <div
+                    id={`node-library-${id}`}
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300"
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label} ({items.length})
+                  </div>
+                  <div className="space-y-1">
+                    {items.map(renderNodeRow)}
+                    {id === 'palette' && items.length === 0 && (
+                      <p className="px-2 py-1 text-[11px] text-slate-400">
+                        星印でよく使うノードを追加できます。
+                      </p>
+                    )}
+                  </div>
+                </section>
+              ))}
+
+            <div className="px-2 pt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+              すべてのノード
+            </div>
             {CATALOG_SECTIONS.map((section) => {
               const sectionItems = filteredDefinitions.filter(
                 (definition) => getNodeCatalogSection(definition) === section.id,
@@ -250,43 +448,7 @@ export const NodeLibrary: React.FC<NodeLibraryProps> = ({
                             </button>
 
                             {!isCategoryCollapsed && (
-                              <div className="space-y-1 pl-1">
-                                {items.map((definition) => {
-                                  const outType =
-                                    definition.outputs[0]?.type ||
-                                    definition.inputs[0]?.type ||
-                                    'any';
-                                  return (
-                                    <button
-                                      key={definition.typeId}
-                                      onClick={() => onAddNode(definition.typeId)}
-                                      className="group w-full flex items-center justify-between p-2 text-left rounded-lg bg-slate-50/70 dark:bg-slate-800/50 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/40 border border-slate-200/70 dark:border-slate-800/70 hover:border-indigo-300 dark:hover:border-indigo-700/60 transition"
-                                      title="キャンバスに配置"
-                                    >
-                                      <div className="flex items-start gap-2 min-w-0">
-                                        <span
-                                          className="w-2.5 h-2.5 rounded-full mt-1 shrink-0"
-                                          style={{
-                                            backgroundColor: getTypeStyle(outType, customTypes)
-                                              .color,
-                                          }}
-                                        />
-                                        <div className="min-w-0">
-                                          <div className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">
-                                            {definition.label}
-                                          </div>
-                                          {definition.description && (
-                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                              {definition.description}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <Plus className="w-3 h-3 shrink-0 ml-1.5 text-indigo-600 dark:text-indigo-400" />
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                              <div className="space-y-1 pl-1">{items.map(renderNodeRow)}</div>
                             )}
                           </div>
                         );

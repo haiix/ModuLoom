@@ -64,6 +64,39 @@ test('ノードライブラリを開いてもはじめてガイドと重なら�
   expect(rectanglesOverlap(guideBox!, libraryBox!)).toBe(false);
 });
 
+test('パレットと最近使用を保存し、全件カタログを維持する', async ({ page }) => {
+  const library = page.getByRole('complementary', { name: 'ノードライブラリ' });
+  await library.getByRole('button', { name: 'Number Inputをパレットに追加' }).click();
+
+  const palette = library.locator('section[aria-labelledby="node-library-palette"]');
+  await expect(palette).toContainText('Number Input');
+  await palette.getByRole('button', { name: 'Number Inputをキャンバスに配置' }).click();
+
+  const recent = library.locator('section[aria-labelledby="node-library-recent"]');
+  await expect(recent).toContainText('Number Input');
+  await expect(library.getByText('すべてのノード', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(
+    palette.getByRole('button', { name: 'Number Inputをパレットから外す' }),
+  ).toBeVisible();
+});
+
+test('キーボード検索と選択ポートの接続可能候補を表示する', async ({ page }) => {
+  await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
+  await page.keyboard.press('/');
+  await expect(page.getByRole('textbox', { name: 'ノードを検索' })).toBeFocused();
+
+  await openPreset(page, 'math-calc');
+  const slider = page.locator('[data-node-id="n-slider-a"]');
+  await slider.getByRole('button', { name: /出力ポート.*候補を表示/ }).click();
+
+  const library = page.getByRole('complementary', { name: 'ノードライブラリ' });
+  const candidates = library.getByRole('region', { name: '接続可能候補' });
+  await expect(candidates).toBeVisible();
+  await expect(candidates.getByRole('button', { name: 'Addをキャンバスに配置' })).toBeVisible();
+});
+
 test('選択ノード操作はノードライブラリの開閉状態にかかわらず重ならない', async ({ page }) => {
   await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'ノードライブラリを閉じる' }).click();
