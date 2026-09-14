@@ -116,7 +116,7 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
 
   'conversion/to-number': emitter(
     (i) =>
-      `(() => { const result = Number(${i}.value); if (!Number.isFinite(result)) throw new Error('INPUT_TYPE: 有限数へ変換できません。'); return { result }; })()`,
+      `(() => { try { const result = Number(${i}.value); if (Number.isFinite(result)) return { result }; } catch {} throw new Error('INPUT_TYPE: 有限数へ変換できません。'); })()`,
   ),
   'conversion/to-string': emitter((i) => `{ result: String(${i}.value) }`),
   'conversion/parse-json': emitter(

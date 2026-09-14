@@ -35,6 +35,9 @@ describe('essential transformation nodes', () => {
     expect(() => definition('conversion/to-number').evaluate({ value: 'nope' })).toThrow(
       /INPUT_TYPE/,
     );
+    expect(() => definition('conversion/to-number').evaluate({ value: Symbol('nope') })).toThrow(
+      /INPUT_TYPE/,
+    );
     expect(definition('conversion/to-string').evaluate({ value: false })).toEqual({
       result: 'false',
     });

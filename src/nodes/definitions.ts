@@ -742,11 +742,13 @@ const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
     inputs: [{ id: 'value', name: 'value', type: 'any' }],
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
-      const result = Number(inputs.value);
-      if (!Number.isFinite(result)) {
-        throw new Error('INPUT_TYPE: 有限数へ変換できません。');
+      try {
+        const result = Number(inputs.value);
+        if (Number.isFinite(result)) return { result };
+      } catch {
+        // Normalize conversion failures to the node contract below.
       }
-      return { result };
+      throw new Error('INPUT_TYPE: 有限数へ変換できません。');
     },
   },
   {
