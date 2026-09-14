@@ -474,4 +474,53 @@ describe('runtime / TypeScript output parity', () => {
     expect(Object.values(generated)).toEqual(expected);
     expectTypechecks(code);
   });
+
+  it('カスタム型Validateは生成コードでもフィールド型の不一致を拒否する', () => {
+    const userType = EXAMPLE_CUSTOM_TYPES.find(({ id }) => id === 'User')!;
+    const definitions = new Map(builtins);
+    for (const definition of generateNodesForCustomType(userType)) {
+      definitions.set(definition.typeId, definition);
+    }
+    const nodes: NodeInstance[] = [
+      {
+        id: 'source',
+        typeId: 'input/json',
+        x: 0,
+        y: 0,
+        state: {
+          rawJson: JSON.stringify({
+            id: 'not-a-number',
+            name: 'User',
+            email: 'user@example.com',
+          }),
+        },
+      },
+      { id: 'validate', typeId: 'type/User/validate', x: 200, y: 0 },
+      { id: 'sink', typeId: 'output/status', x: 400, y: 0 },
+    ];
+    const connections: Connection[] = [
+      {
+        id: 'source-validate',
+        fromNodeId: 'source',
+        fromPortId: 'value',
+        toNodeId: 'validate',
+        toPortId: 'data',
+      },
+      {
+        id: 'validate-sink',
+        fromNodeId: 'validate',
+        fromPortId: 'isValid',
+        toNodeId: 'sink',
+        toPortId: 'status',
+      },
+    ];
+
+    const runtime = evaluateGraph(nodes, connections, definitions);
+    const code = generateTypeScriptCode(nodes, connections, definitions, [userType]);
+    const generated = compilePipeline(code)() as Record<string, unknown>;
+
+    expect(runtime.validate.outputs).toEqual({ isValid: false, instance: null });
+    expect(Object.values(generated)).toEqual([false]);
+    expectTypechecks(code);
+  });
 });

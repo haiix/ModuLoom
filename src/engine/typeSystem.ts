@@ -24,6 +24,28 @@ export function isTypeCompatible(
   return fromType === toType;
 }
 
+/** Checks a runtime value against the flat type contract used by ports and custom fields. */
+export function isValueCompatibleWithType(value: unknown, type: DataType): boolean {
+  if (type === 'any') return value !== undefined;
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'array') return Array.isArray(value);
+  if (type === 'object')
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (type === 'promise') {
+    return Boolean(value && typeof (value as { then?: unknown }).then === 'function');
+  }
+  if (type === 'stream') {
+    return Boolean(
+      value &&
+      typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function',
+    );
+  }
+  // Custom types are nominal for wiring but represented by plain objects at runtime.
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Detect runtime type of a value
  */

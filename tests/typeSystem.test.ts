@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectValueType, formatValue, isTypeCompatible } from '../src/engine/typeSystem';
+import {
+  detectValueType,
+  formatValue,
+  isTypeCompatible,
+  isValueCompatibleWithType,
+} from '../src/engine/typeSystem';
 import type { CustomTypeDefinition } from '../src/types';
 
 const customTypes: CustomTypeDefinition[] = [
@@ -50,6 +55,17 @@ describe('detectValueType', () => {
         },
       }),
     ).toBe('stream');
+  });
+});
+
+describe('isValueCompatibleWithType', () => {
+  it('uses the same flat type semantics as input validation', () => {
+    expect(isValueCompatibleWithType(1, 'number')).toBe(true);
+    expect(isValueCompatibleWithType(Number.NaN, 'number')).toBe(false);
+    expect(isValueCompatibleWithType([], 'array')).toBe(true);
+    expect(isValueCompatibleWithType([], 'object')).toBe(false);
+    expect(isValueCompatibleWithType({}, 'User')).toBe(true);
+    expect(isValueCompatibleWithType(undefined, 'any')).toBe(false);
   });
 });
 
