@@ -9,6 +9,7 @@ import {
 import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
 import { CUSTOM_CODE_MAX_SLEEP_MS } from './customCodePolicy';
 import { GENERATED_STREAM_HELPERS } from '../nodes/codegen';
+import { isValueCompatibleWithType } from './typeSystem';
 
 /**
  * Checks if adding a connection from fromNodeId to toNodeId would create a cycle.
@@ -345,24 +346,7 @@ function clonePortValue(value: any): any {
 }
 
 function validatePortValue(port: import('../types').Port, value: any): string | undefined {
-  const valid =
-    port.type === 'any'
-      ? value !== undefined
-      : port.type === 'number'
-        ? typeof value === 'number' && Number.isFinite(value)
-        : port.type === 'string'
-          ? typeof value === 'string'
-          : port.type === 'boolean'
-            ? typeof value === 'boolean'
-            : port.type === 'array'
-              ? Array.isArray(value)
-              : port.type === 'object'
-                ? value !== null && typeof value === 'object' && !Array.isArray(value)
-                : port.type === 'promise'
-                  ? Boolean(value && typeof value.then === 'function')
-                  : port.type === 'stream'
-                    ? Boolean(value && typeof value[Symbol.asyncIterator] === 'function')
-                    : value !== null && typeof value === 'object' && !Array.isArray(value);
+  const valid = isValueCompatibleWithType(value, port.type);
   if (!valid) return `INPUT_TYPE: '${port.name}' は ${port.type} 型である必要があります。`;
   if (port.constraints?.integer && !Number.isInteger(value)) {
     return `INPUT_CONSTRAINT: '${port.name}' は整数である必要があります。`;

@@ -111,5 +111,7 @@
 
 ## カスタム型由来ノード
 
-`type/<TypeId>/constructor`、`deconstruct`、`validate` を生成します。Validateは必須フィールドが
-`null` または `undefined` でないことを検査し、失敗時は `isValid: false` と `instance: null` を返します。
+`type/<TypeId>/constructor`、`deconstruct`、`validate` を生成します。Validateは入力がプレーン
+オブジェクトで、必須フィールドが存在し、存在する必須・任意フィールドが宣言型に合うことを検査
+します。失敗時は `isValid: false` と `instance: null` を返します。保証範囲は
+[型システム設計](./type-system.md)を参照してください。

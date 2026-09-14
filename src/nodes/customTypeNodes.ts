@@ -1,4 +1,5 @@
 import { CustomTypeDefinition, NodeDefinition } from '../types';
+import { isValueCompatibleWithType } from '../engine/typeSystem';
 
 /**
  * Generates Constructor, Deconstructor, and Validator pure function nodes for a given custom type definition.
@@ -123,16 +124,14 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     ],
     evaluate: (inputs) => {
       const data = inputs.data;
-      if (!data || typeof data !== 'object') {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
         return { isValid: false, instance: null };
       }
-      let isValid = true;
-      for (const field of fields) {
-        if (field.required && (data[field.name] === undefined || data[field.name] === null)) {
-          isValid = false;
-          break;
-        }
-      }
+      const isValid = fields.every((field) => {
+        const value = data[field.name];
+        if (value === undefined || value === null) return !field.required;
+        return isValueCompatibleWithType(value, field.type);
+      });
       return {
         isValid,
         instance: isValid ? JSON.parse(JSON.stringify(data)) : null,
@@ -140,7 +139,7 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     },
     codegen: {
       emit: ({ inputsVar }) =>
-        `(() => { const data = ${inputsVar}.data; if (!data || typeof data !== 'object') return { isValid: false, instance: null }; const isValid = ${JSON.stringify(fields)}.every(field => !field.required || (data[field.name] !== undefined && data[field.name] !== null)); return { isValid, instance: isValid ? JSON.parse(JSON.stringify(data)) : null }; })()`,
+        `(() => { const data = ${inputsVar}.data; if (!data || typeof data !== 'object' || Array.isArray(data)) return { isValid: false, instance: null }; const matchesType = (value: any, type: string) => type === 'any' ? value !== undefined : type === 'number' ? typeof value === 'number' && Number.isFinite(value) : type === 'string' ? typeof value === 'string' : type === 'boolean' ? typeof value === 'boolean' : type === 'array' ? Array.isArray(value) : type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value) : type === 'promise' ? Boolean(value && typeof value.then === 'function') : type === 'stream' ? Boolean(value && typeof value[Symbol.asyncIterator] === 'function') : value !== null && typeof value === 'object' && !Array.isArray(value); const isValid = ${JSON.stringify(fields)}.every(field => { const value = data[field.name]; return value === undefined || value === null ? !field.required : matchesType(value, field.type); }); return { isValid, instance: isValid ? JSON.parse(JSON.stringify(data)) : null }; })()`,
     },
   };
 

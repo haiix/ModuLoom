@@ -12,7 +12,7 @@
 
 - 1つの入力ポートに接続できる線は1本
 - カスタム型のフィールド型は組み込み型のみ
-- カスタム型 Validate は必須フィールドの存在だけを確認し、値の型は確認しない
+- Array / Promise / Streamのポート型は要素型を保持しない
 - 自作ノードは単一式で、式の値は先頭の出力ポートだけに設定
 - 自作式はWeb Worker内のQuickJS VMへ隔離され、RuntimeをCPU 750ms、heap 16MiB、stack 512KiBに制限するが、QuickJS-Emscriptenは1.0未満かつ本プロジェクトの脅威モデルでは未監査
 - 自作式は64KiB、入力・返却JSONは各1MiB、親watchdogは1秒までで、関数、循環参照、`undefined` などJSON化できない値を入出力できない
