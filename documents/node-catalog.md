@@ -21,24 +21,25 @@
 
 ## 全組み込みノードの分類
 
-機能カテゴリは各定義の `category` と同じです。以下の53件を分類対象とします。
+機能カテゴリは各定義の `category` と同じです。以下の60件を分類対象とします。
 
-| セクション | 機能カテゴリ | `typeId`                                                                                                          |
-| ---------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Core       | Input        | `input/number`, `input/slider`, `input/text`, `input/boolean`, `input/array`, `input/json`                        |
-| Core       | Math         | `math/add`, `math/subtract`, `math/multiply`, `math/divide`, `math/modulo`, `math/round`, `math/abs`, `math/sqrt` |
-| Core       | String       | `string/concat`, `string/uppercase`, `string/length`                                                              |
-| Core       | Logic        | `logic/and`, `logic/or`, `logic/not`, `logic/greater`, `logic/equal`, `logic/branch`                              |
-| Core       | Array        | `array/create`, `array/length`, `array/join`, `array/sum`                                                         |
-| Core       | Object       | `object/create`, `object/get`, `object/stringify`                                                                 |
-| Core       | Output       | `output/inspector`                                                                                                |
-| Advanced   | String       | `string/template`, `string/split`                                                                                 |
-| Advanced   | Array        | `array/map`, `array/filter`, `array/slice`, `array/reverse`                                                       |
-| Advanced   | Async        | `async/delay`, `async/resolve`, `async/await`, `async/all`                                                        |
-| Advanced   | Stream       | `stream/interval`, `stream/from_array`, `stream/map`, `stream/filter`, `stream/take`, `stream/collect`            |
-| Advanced   | Output       | `output/gauge`, `output/status`, `output/log`                                                                     |
-| Advanced   | Composite    | `composite/input-port`, `composite/output-port`                                                                   |
-| Examples   | Async        | `async/fetch`                                                                                                     |
+| セクション | 機能カテゴリ | `typeId`                                                                                                                        |
+| ---------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Core       | Input        | `input/number`, `input/slider`, `input/text`, `input/boolean`, `input/array`, `input/json`                                      |
+| Core       | Math         | `math/add`, `math/subtract`, `math/multiply`, `math/divide`, `math/modulo`, `math/round`, `math/abs`, `math/sqrt`, `math/clamp` |
+| Core       | String       | `string/concat`, `string/uppercase`, `string/length`, `string/trim`                                                             |
+| Core       | Logic        | `logic/and`, `logic/or`, `logic/not`, `logic/greater`, `logic/equal`, `logic/branch`                                            |
+| Core       | Array        | `array/create`, `array/length`, `array/join`, `array/sum`, `array/get`                                                          |
+| Core       | Object       | `object/create`, `object/get`, `object/stringify`, `object/keys`                                                                |
+| Core       | Utility      | `conversion/to-number`, `conversion/to-string`, `conversion/parse-json`                                                         |
+| Core       | Output       | `output/inspector`                                                                                                              |
+| Advanced   | String       | `string/template`, `string/split`                                                                                               |
+| Advanced   | Array        | `array/map`, `array/filter`, `array/slice`, `array/reverse`                                                                     |
+| Advanced   | Async        | `async/delay`, `async/resolve`, `async/await`, `async/all`                                                                      |
+| Advanced   | Stream       | `stream/interval`, `stream/from_array`, `stream/map`, `stream/filter`, `stream/take`, `stream/collect`                          |
+| Advanced   | Output       | `output/gauge`, `output/status`, `output/log`                                                                                   |
+| Advanced   | Composite    | `composite/input-port`, `composite/output-port`                                                                                 |
+| Examples   | Async        | `async/fetch`                                                                                                                   |
 
 User / Point2D を含むサンプルを開く・挿入したときに生成される Constructor、Deconstruct、
 Validate は Examples に配置します。新規プロジェクトへ教材型は自動投入しません。ユーザーが
@@ -48,7 +49,7 @@ Validate は Examples に配置します。新規プロジェクトへ教材型�
 
 ```text
 [検索: 名前・説明・機能カテゴリ・検索タグ]
-▼ Core (31)        最初に使う基本ノード
+▼ Core (38)        最初に使う基本ノード
   ▼ Input (6)
   ▼ Math (8)
   ...

@@ -59,9 +59,11 @@
 | `math/round`       | Round              | `value`                          | —               | `Math.round`                    |
 | `math/abs`         | Absolute           | `value`                          | —               | 絶対値                          |
 | `math/sqrt`        | Square Root        | `value`                          | —               | 負数は `DOMAIN_ERROR`           |
+| `math/clamp`       | Clamp              | `value`, `min`, `max`            | —               | `min > max` は `DOMAIN_ERROR`   |
 | `string/concat`    | Concat             | `a`, `b`                         | —               | 文字列連結                      |
 | `string/template`  | Template Format    | `template`, `a`, `b`             | —               | `{a}` と `{b}` を置換           |
 | `string/uppercase` | To UpperCase       | `text`                           | —               | 大文字化                        |
+| `string/trim`      | Trim               | `text`                           | —               | 前後の空白を除去                |
 | `string/split`     | Split to Array     | `text`                           | `separator=","` | 前後空白を除去                  |
 | `string/length`    | String Length      | `text`                           | —               | UTF-16コード単位の長さ          |
 | `logic/and`        | Logical AND        | `a`, `b`                         | —               | 論理積                          |
@@ -73,23 +75,28 @@
 
 ### Array / Object / Output
 
-| `typeId`           | 表示名              | 必須             | 任意             | 固有契約                                            |
-| ------------------ | ------------------- | ---------------- | ---------------- | --------------------------------------------------- |
-| `array/create`     | Combine Items       | `item1`, `item2` | —                | 2要素の配列を返す                                   |
-| `array/length`     | Array Length        | `arr`            | —                | 要素数                                              |
-| `array/join`       | Array Join          | `arr`            | `separator=", "` | `Array.join`                                        |
-| `array/map`        | Map Numbers         | `arr`            | `factor=2`       | 非数値要素は維持。除算の係数0は `DOMAIN_ERROR`      |
-| `array/filter`     | Filter Numbers      | `arr`            | `threshold=0`    | 非数値要素を除外。厳密比較記号も受理                |
-| `array/slice`      | Array Slice         | `arr`, `end`     | `start=0`        | `Array.slice`                                       |
-| `array/reverse`    | Array Reverse       | `arr`            | —                | 入力を変更せず反転                                  |
-| `array/sum`        | Sum Numbers         | `arr`            | —                | 非有限数または非数値要素は `INPUT_TYPE`             |
-| `object/create`    | Object Entry        | `key`, `value`   | —                | 空文字列・危険なキーは `INPUT_CONSTRAINT`           |
-| `object/get`       | Get Property        | `obj`, `key`     | —                | 自身のプロパティだけを取得。欠落は `DOMAIN_ERROR`   |
-| `object/stringify` | JSON Stringify      | `data`           | —                | 直列化不能な値は `DOMAIN_ERROR`                     |
-| `output/inspector` | Value Inspector     | `value`          | —                | 現在値と型を表示                                    |
-| `output/gauge`     | Progress / Gauge    | `value`          | —                | 数値をゲージ表示                                    |
-| `output/status`    | Boolean Status Pill | `status`         | —                | booleanをバッジ表示                                 |
-| `output/log`       | Log Viewer          | `message`        | —                | 現在値をログ形式で表示。履歴やconsole出力は持たない |
+| `typeId`                | 表示名              | 必須             | 任意             | 固有契約                                            |
+| ----------------------- | ------------------- | ---------------- | ---------------- | --------------------------------------------------- |
+| `array/create`          | Combine Items       | `item1`, `item2` | —                | 2要素の配列を返す                                   |
+| `array/length`          | Array Length        | `arr`            | —                | 要素数                                              |
+| `array/get`             | Get Item            | `arr`, `index`   | —                | 負数は末尾基準。範囲外は `DOMAIN_ERROR`             |
+| `array/join`            | Array Join          | `arr`            | `separator=", "` | `Array.join`                                        |
+| `array/map`             | Map Numbers         | `arr`            | `factor=2`       | 非数値要素は維持。除算の係数0は `DOMAIN_ERROR`      |
+| `array/filter`          | Filter Numbers      | `arr`            | `threshold=0`    | 非数値要素を除外。厳密比較記号も受理                |
+| `array/slice`           | Array Slice         | `arr`, `end`     | `start=0`        | `Array.slice`                                       |
+| `array/reverse`         | Array Reverse       | `arr`            | —                | 入力を変更せず反転                                  |
+| `array/sum`             | Sum Numbers         | `arr`            | —                | 非有限数または非数値要素は `INPUT_TYPE`             |
+| `object/create`         | Object Entry        | `key`, `value`   | —                | 空文字列・危険なキーは `INPUT_CONSTRAINT`           |
+| `object/get`            | Get Property        | `obj`, `key`     | —                | 自身のプロパティだけを取得。欠落は `DOMAIN_ERROR`   |
+| `object/keys`           | Object Keys         | `obj`            | —                | 自身の列挙可能なキーを配列で返す                    |
+| `object/stringify`      | JSON Stringify      | `data`           | —                | 直列化不能な値は `DOMAIN_ERROR`                     |
+| `conversion/to-number`  | To Number           | `value`          | —                | 有限数へ変換不能なら `INPUT_TYPE`                   |
+| `conversion/to-string`  | To String           | `value`          | —                | JavaScriptの `String` 変換                          |
+| `conversion/parse-json` | Parse JSON          | `text`           | —                | 不正JSONは `INPUT_TYPE`                             |
+| `output/inspector`      | Value Inspector     | `value`          | —                | 現在値と型を表示                                    |
+| `output/gauge`          | Progress / Gauge    | `value`          | —                | 数値をゲージ表示                                    |
+| `output/status`         | Boolean Status Pill | `status`         | —                | booleanをバッジ表示                                 |
+| `output/log`            | Log Viewer          | `message`        | —                | 現在値をログ形式で表示。履歴やconsole出力は持たない |
 
 ### Async / Stream / Composite
 

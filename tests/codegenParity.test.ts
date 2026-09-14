@@ -91,6 +91,8 @@ function makeValueSource(id: string, value: unknown, type: 'promise' | 'stream')
 
 const inputOverrides: Record<string, Record<string, unknown>> = {
   'math/divide': { a: 9, b: 3 },
+  'math/clamp': { value: 12, min: 0, max: 10 },
+  'array/get': { arr: ['first'], index: 0 },
   'array/map': { arr: [1, 2, 'x'], factor: 3 },
   'array/filter': { arr: [-1, 2, 4], threshold: 2 },
   'async/delay': { value: 'done', delayMs: 0 },
@@ -100,6 +102,8 @@ const inputOverrides: Record<string, Record<string, unknown>> = {
   'stream/map': { multiplier: 3 },
   'stream/filter': { threshold: 1 },
   'stream/take': { count: 2 },
+  'conversion/to-number': { value: '12.5' },
+  'conversion/parse-json': { text: '{"ok":true}' },
 };
 
 const stateOverrides: Record<string, unknown> = {

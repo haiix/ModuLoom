@@ -264,6 +264,25 @@ const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
       return { result: Math.sqrt(inputs.value) };
     },
   },
+  {
+    typeId: 'math/clamp',
+    label: 'Clamp',
+    category: 'Math',
+    kind: 'pure',
+    description: '数値を最小値と最大値の範囲内に制限',
+    inputs: [
+      { id: 'value', name: 'value', type: 'number' },
+      { id: 'min', name: 'min', type: 'number' },
+      { id: 'max', name: 'max', type: 'number' },
+    ],
+    outputs: [{ id: 'result', name: 'result', type: 'number' }],
+    evaluate: (inputs) => {
+      if (inputs.min > inputs.max) {
+        throw new Error('DOMAIN_ERROR: Clampのminはmax以下である必要があります。');
+      }
+      return { result: Math.min(inputs.max, Math.max(inputs.min, inputs.value)) };
+    },
+  },
 
   // ==========================================
   // PURE FUNCTION NODES: STRING
@@ -320,6 +339,16 @@ const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
     evaluate: (inputs) => {
       return { result: String(inputs.text ?? '').toUpperCase() };
     },
+  },
+  {
+    typeId: 'string/trim',
+    label: 'Trim',
+    category: 'String',
+    kind: 'pure',
+    description: '文字列の先頭と末尾の空白を除去',
+    inputs: [{ id: 'text', name: 'text', type: 'string' }],
+    outputs: [{ id: 'result', name: 'result', type: 'string' }],
+    evaluate: (inputs) => ({ result: inputs.text.trim() }),
   },
   {
     typeId: 'string/split',
@@ -471,6 +500,25 @@ const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
       return { result: Array.isArray(inputs.arr) ? inputs.arr.length : 0 };
+    },
+  },
+  {
+    typeId: 'array/get',
+    label: 'Get Item',
+    category: 'Array',
+    kind: 'pure',
+    description: '配列からインデックス位置の要素を取得。負数は末尾から数える',
+    inputs: [
+      { id: 'arr', name: 'arr', type: 'array' },
+      { id: 'index', name: 'index', type: 'number', constraints: { integer: true } },
+    ],
+    outputs: [{ id: 'result', name: 'result', type: 'any' }],
+    evaluate: (inputs) => {
+      const normalizedIndex = inputs.index < 0 ? inputs.arr.length + inputs.index : inputs.index;
+      if (normalizedIndex < 0 || normalizedIndex >= inputs.arr.length) {
+        throw new Error('DOMAIN_ERROR: 配列インデックスが範囲外です。');
+      }
+      return { result: inputs.arr[normalizedIndex] };
     },
   },
   {
@@ -656,6 +704,16 @@ const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
     },
   },
   {
+    typeId: 'object/keys',
+    label: 'Object Keys',
+    category: 'Object',
+    kind: 'pure',
+    description: 'オブジェクト自身の列挙可能なキーを配列で取得',
+    inputs: [{ id: 'obj', name: 'obj', type: 'object' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    evaluate: (inputs) => ({ result: Object.keys(inputs.obj) }),
+  },
+  {
     typeId: 'object/stringify',
     label: 'JSON Stringify',
     category: 'Object',
@@ -668,6 +726,54 @@ const BUILTIN_NODE_IMPLEMENTATIONS: NodeDefinition[] = [
         return { result: JSON.stringify(inputs.data, null, 2) };
       } catch {
         throw new Error('DOMAIN_ERROR: JSONへ直列化できません。');
+      }
+    },
+  },
+
+  // ==========================================
+  // PURE FUNCTION NODES: CONVERSION
+  // ==========================================
+  {
+    typeId: 'conversion/to-number',
+    label: 'To Number',
+    category: 'Utility',
+    kind: 'pure',
+    description: '値を有限数へ変換',
+    inputs: [{ id: 'value', name: 'value', type: 'any' }],
+    outputs: [{ id: 'result', name: 'result', type: 'number' }],
+    evaluate: (inputs) => {
+      try {
+        const result = Number(inputs.value);
+        if (Number.isFinite(result)) return { result };
+      } catch {
+        // Normalize conversion failures to the node contract below.
+      }
+      throw new Error('INPUT_TYPE: 有限数へ変換できません。');
+    },
+  },
+  {
+    typeId: 'conversion/to-string',
+    label: 'To String',
+    category: 'Utility',
+    kind: 'pure',
+    description: '値を文字列へ変換',
+    inputs: [{ id: 'value', name: 'value', type: 'any' }],
+    outputs: [{ id: 'result', name: 'result', type: 'string' }],
+    evaluate: (inputs) => ({ result: String(inputs.value) }),
+  },
+  {
+    typeId: 'conversion/parse-json',
+    label: 'Parse JSON',
+    category: 'Utility',
+    kind: 'pure',
+    description: 'JSON文字列を値へ変換',
+    inputs: [{ id: 'text', name: 'text', type: 'string' }],
+    outputs: [{ id: 'result', name: 'result', type: 'any' }],
+    evaluate: (inputs) => {
+      try {
+        return { result: JSON.parse(inputs.text) };
+      } catch {
+        throw new Error('INPUT_TYPE: JSON文字列が不正です。');
       }
     },
   },

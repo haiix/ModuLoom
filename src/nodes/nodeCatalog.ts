@@ -30,6 +30,13 @@ const EXAMPLE_BUILTIN_IDS = new Set(['async/fetch']);
 
 const EXTRA_SEARCH_TAGS: Record<string, string[]> = {
   'input/json': ['JSON', 'object'],
+  'math/clamp': ['range', 'limit', 'min', 'max'],
+  'string/trim': ['whitespace'],
+  'array/get': ['index', 'item'],
+  'object/keys': ['properties'],
+  'conversion/to-number': ['convert', 'parse', 'cast'],
+  'conversion/to-string': ['convert', 'format', 'cast'],
+  'conversion/parse-json': ['convert', 'deserialize', 'object'],
   'logic/branch': ['if', 'conditional'],
   'logic/equal': ['equals', 'comparison'],
   'output/inspector': ['preview', 'debug'],
