@@ -45,6 +45,10 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
     (i) =>
       `(() => { if (${i}.value < 0) throw new Error('DOMAIN_ERROR: 負数の平方根は計算できません。'); return { result: Math.sqrt(${i}.value) }; })()`,
   ),
+  'math/clamp': emitter(
+    (i) =>
+      `(() => { if (${i}.min > ${i}.max) throw new Error('DOMAIN_ERROR: Clampのminはmax以下である必要があります。'); return { result: Math.min(${i}.max, Math.max(${i}.min, ${i}.value)) }; })()`,
+  ),
 
   'string/concat': emitter((i) => `{ result: String(${i}.a ?? '') + String(${i}.b ?? '') }`),
   'string/template': emitter(
@@ -52,6 +56,7 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
       `{ result: String(${i}.template ?? '').replace(/\\{a\\}/g, String(${i}.a ?? '')).replace(/\\{b\\}/g, String(${i}.b ?? '')) }`,
   ),
   'string/uppercase': emitter((i) => `{ result: String(${i}.text ?? '').toUpperCase() }`),
+  'string/trim': emitter((i) => `{ result: ${i}.text.trim() }`),
   'string/split': emitter(
     (i) =>
       `{ result: String(${i}.text ?? '').split(String(${i}.separator ?? ',')).map(value => value.trim()) }`,
@@ -67,6 +72,10 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
 
   'array/create': emitter((i) => `{ result: [${i}.item1, ${i}.item2] }`),
   'array/length': emitter((i) => `{ result: Array.isArray(${i}.arr) ? ${i}.arr.length : 0 }`),
+  'array/get': emitter(
+    (i) =>
+      `(() => { const index = ${i}.index < 0 ? ${i}.arr.length + ${i}.index : ${i}.index; if (index < 0 || index >= ${i}.arr.length) throw new Error('DOMAIN_ERROR: 配列インデックスが範囲外です。'); return { result: ${i}.arr[index] }; })()`,
+  ),
   'array/join': emitter(
     (i) =>
       `{ result: (Array.isArray(${i}.arr) ? ${i}.arr : []).join(String(${i}.separator ?? ', ')) }`,
@@ -99,9 +108,20 @@ export const BUILTIN_NODE_CODEGEN: Record<string, NodeCodegenMetadata> = {
     (i) =>
       `(() => { const value = ${i}.obj; if (!Object.prototype.hasOwnProperty.call(value, ${i}.key)) throw new Error(\`DOMAIN_ERROR: プロパティ '\${${i}.key}' が存在しません。\`); return { result: value[${i}.key] }; })()`,
   ),
+  'object/keys': emitter((i) => `{ result: Object.keys(${i}.obj) }`),
   'object/stringify': emitter(
     (i) =>
       `(() => { try { return { result: JSON.stringify(${i}.data, null, 2) }; } catch { throw new Error('DOMAIN_ERROR: JSONへ直列化できません。'); } })()`,
+  ),
+
+  'conversion/to-number': emitter(
+    (i) =>
+      `(() => { const result = Number(${i}.value); if (!Number.isFinite(result)) throw new Error('INPUT_TYPE: 有限数へ変換できません。'); return { result }; })()`,
+  ),
+  'conversion/to-string': emitter((i) => `{ result: String(${i}.value) }`),
+  'conversion/parse-json': emitter(
+    (i) =>
+      `(() => { try { return { result: JSON.parse(${i}.text) }; } catch { throw new Error('INPUT_TYPE: JSON文字列が不正です。'); } })()`,
   ),
 
   'output/inspector': emitter((i) => `{ displayedValue: ${i}.value }`),
