@@ -33,6 +33,7 @@ import {
   NODE_LIBRARY_STORAGE_KEY,
 } from './components/browserPreferences';
 import { NodeLibrary } from './components/NodeLibrary';
+import type { SelectedPort } from './components/nodeLibraryModel';
 import { LoadGraphModal } from './components/LoadGraphModal';
 import { CustomNodeModal } from './components/CustomNodeModal';
 import { CustomTypeModal } from './components/CustomTypeModal';
@@ -471,6 +472,7 @@ function EditorApp({
       () => window.matchMedia('(max-width: 767px)').matches,
     ),
   );
+  const [selectedLibraryPort, setSelectedLibraryPort] = useState<SelectedPort | null>(null);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
   const [isCustomTypeModalOpen, setIsCustomTypeModalOpen] = useState(false);
@@ -1687,6 +1689,10 @@ function EditorApp({
             setPan(newPan);
           }}
           isLibraryOpen={isLibraryOpen}
+          onSelectPort={(port) => {
+            setSelectedLibraryPort(port);
+            setIsLibraryOpen(true);
+          }}
         />
 
         {showOnboarding && (
@@ -1713,6 +1719,9 @@ function EditorApp({
           onOpenCreateCompositeModal={() => setIsCreateCompositeOpen(true)}
           isOpen={isLibraryOpen}
           onToggleOpen={() => setIsLibraryOpen((o) => !o)}
+          nodeTypeIds={nodes.map((node) => node.typeId)}
+          selectedPort={selectedLibraryPort}
+          onClearSelectedPort={() => setSelectedLibraryPort(null)}
         />
 
         {/* Floating DAG Topological Execution Visualizer */}

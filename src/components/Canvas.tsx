@@ -11,6 +11,7 @@ import {
 import { isTypeCompatible } from '../engine/typeSystem';
 import { wouldCreateCycle } from '../engine/dagEngine';
 import type { Alignment, Distribution } from '../engine/graphEditing';
+import type { SelectedPort } from './nodeLibraryModel';
 import { NodeView } from './NodeView';
 import { Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
 
@@ -41,6 +42,7 @@ interface CanvasProps {
   onUpdateZoomPan: (zoom: number, pan: { x: number; y: number }) => void;
   onUnpackComposite?: (nodeId: string) => void;
   isLibraryOpen?: boolean;
+  onSelectPort?: (port: SelectedPort) => void;
 }
 
 interface DraggingWireBase {
@@ -92,6 +94,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onUpdateZoomPan,
   onUnpackComposite,
   isLibraryOpen = false,
+  onSelectPort,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
@@ -870,6 +873,26 @@ export const Canvas: React.FC<CanvasProps> = ({
                   handlePortMouseDown(e, node.id, portId, isOut)
                 }
                 onPortMouseUp={(e, portId, isOut) => handlePortMouseUp(e, node.id, portId, isOut)}
+                onPortActivate={(portId, isOutput) => {
+                  const ports = isOutput ? def.outputs : def.inputs;
+                  const port = ports.find((candidate) => candidate.id === portId);
+                  if (!port) return;
+                  const type =
+                    node.typeId === 'composite/input-port' && isOutput
+                      ? node.state?.portType || port.type
+                      : node.typeId === 'composite/output-port' && !isOutput
+                        ? node.state?.portType || port.type
+                        : port.type;
+                  onSelectPort?.({
+                    direction: isOutput ? 'output' : 'input',
+                    type,
+                    name:
+                      (node.typeId === 'composite/input-port' && isOutput) ||
+                      (node.typeId === 'composite/output-port' && !isOutput)
+                        ? node.state?.portName || port.name
+                        : port.name,
+                  });
+                }}
                 connectedPorts={
                   connectedPortsMap[node.id] || { inputs: new Set(), outputs: new Set() }
                 }

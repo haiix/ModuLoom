@@ -44,6 +44,7 @@ interface NodeViewProps {
   onUpdateLabel: (newLabel: string) => void;
   onPortMouseDown: (e: React.MouseEvent, portId: string, isOutput: boolean) => void;
   onPortMouseUp: (e: React.MouseEvent, portId: string, isOutput: boolean) => void;
+  onPortActivate?: (portId: string, isOutput: boolean) => void;
   connectedPorts: {
     inputs: Set<string>;
     outputs: Set<string>;
@@ -83,6 +84,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
   onUpdateLabel,
   onPortMouseDown,
   onPortMouseUp,
+  onPortActivate,
   connectedPorts,
   dragWireTargetHover,
 }) => {
@@ -809,6 +811,9 @@ export const NodeView: React.FC<NodeViewProps> = ({
                     >
                       {/* Socket circle */}
                       <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${port.name}入力ポート (${port.type})。候補を表示`}
                         data-port-node-id={node.id}
                         data-port-id={port.id}
                         data-port-direction="in"
@@ -819,6 +824,17 @@ export const NodeView: React.FC<NodeViewProps> = ({
                         onMouseUp={(e) => {
                           e.stopPropagation();
                           onPortMouseUp(e, port.id, false);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPortActivate?.(port.id, false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onPortActivate?.(port.id, false);
+                          }
                         }}
                         className={`w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-transform hover:scale-125 -ml-4.5 bg-white dark:bg-slate-900 shrink-0 ${
                           isHoveredCompatible
@@ -902,6 +918,9 @@ export const NodeView: React.FC<NodeViewProps> = ({
 
                       {/* Socket circle */}
                       <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${port.name}出力ポート (${port.type})。候補を表示`}
                         data-port-node-id={node.id}
                         data-port-id={port.id}
                         data-port-direction="out"
@@ -912,6 +931,17 @@ export const NodeView: React.FC<NodeViewProps> = ({
                         onMouseUp={(e) => {
                           e.stopPropagation();
                           onPortMouseUp(e, port.id, true);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPortActivate?.(port.id, true);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onPortActivate?.(port.id, true);
+                          }
                         }}
                         className="w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-transform hover:scale-125 -mr-4.5 bg-white dark:bg-slate-900 shrink-0"
                         style={{

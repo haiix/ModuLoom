@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  EMPTY_NODE_PALETTE_PREFERENCES,
   getInitialNodeLibraryOpen,
+  MAX_RECENT_NODE_TYPES,
   NODE_LIBRARY_STORAGE_KEY,
+  NODE_PALETTE_STORAGE_KEY,
+  parseNodePalettePreferences,
+  recordRecentNode,
+  togglePinnedNode,
 } from '../src/components/browserPreferences';
 
 describe('browser preferences', () => {
@@ -47,5 +53,40 @@ describe('browser preferences', () => {
         },
       ),
     ).toBe(true);
+  });
+});
+
+describe('node palette preferences', () => {
+  it('parses, deduplicates, and bounds browser-only preferences', () => {
+    const recentTypeIds = Array.from(
+      { length: MAX_RECENT_NODE_TYPES + 3 },
+      (_, index) => `n/${index}`,
+    );
+    const parsed = parseNodePalettePreferences(
+      JSON.stringify({ pinnedTypeIds: ['math/add', 'math/add'], recentTypeIds }),
+    );
+
+    expect(NODE_PALETTE_STORAGE_KEY).toBe('moduloom:node-palette-v1');
+    expect(parsed.pinnedTypeIds).toEqual(['math/add']);
+    expect(parsed.recentTypeIds).toEqual(recentTypeIds.slice(0, MAX_RECENT_NODE_TYPES));
+  });
+
+  it('falls back for missing, malformed, or legacy settings', () => {
+    expect(parseNodePalettePreferences(null)).toEqual(EMPTY_NODE_PALETTE_PREFERENCES);
+    expect(parseNodePalettePreferences('{')).toEqual(EMPTY_NODE_PALETTE_PREFERENCES);
+    expect(parseNodePalettePreferences(JSON.stringify({ collapsedCategories: {} }))).toEqual(
+      EMPTY_NODE_PALETTE_PREFERENCES,
+    );
+  });
+
+  it('updates pin and recent lists without duplicates', () => {
+    const pinned = togglePinnedNode(EMPTY_NODE_PALETTE_PREFERENCES, 'math/add');
+    expect(togglePinnedNode(pinned, 'math/add').pinnedTypeIds).toEqual([]);
+
+    const recent = recordRecentNode(recordRecentNode(pinned, 'math/add'), 'string/concat');
+    expect(recordRecentNode(recent, 'math/add').recentTypeIds).toEqual([
+      'math/add',
+      'string/concat',
+    ]);
   });
 });
