@@ -108,7 +108,7 @@ type BuiltinDataType =
 
 QuickJSのPromiseは `resolvePromise` と `executePendingJobs` で進行します。ホスト非同期APIは `newPromise` で実装した0〜1,000msの `sleep(ms)` だけを公開し、解決時にpending jobを再開します。汎用タイマーは公開しません。
 
-各RuntimeはCPU実行750ms、QuickJS heap 16MiB、stack 512KiBに制限します。親スレッドのwall-clock watchdogは1秒です。式はUTF-8で64KiB、入力・返却JSONはそれぞれ1MiBが上限です。通常完了後はWorkerとWASM moduleを次の評価に再利用しますが、Runtime制限超過、親タイムアウト、AbortSignal中断、Worker異常では外側のWorkerを強制終了し、次のキュー項目から新しいWorkerを起動します。古いWorkerの応答IDは現在の評価と一致しないため破棄されます。
+各RuntimeはQuickJS内の同期guest実行を1区間あたりCPU 750ms、heap 16MiB、stack 512KiBに制限します。CPU期限は単調時計を使い、入力JSONの導入、ユーザー式、Promise jobの各実行直前に設定して、Context生成やホスト側の待機時間を含めません。親スレッドのwall-clock watchdogはVM初期化、ホスト側の待機、guest実行を含む評価全体を1秒で打ち切る役割を持ちます。式はUTF-8で64KiB、入力・返却JSONはそれぞれ1MiBが上限です。通常完了後はWorkerとWASM moduleを次の評価に再利用しますが、Runtime制限超過、親タイムアウト、AbortSignal中断、Worker異常では外側のWorkerを強制終了し、次のキュー項目から新しいWorkerを起動します。古いWorkerの応答IDは現在の評価と一致しないため破棄されます。
 
 事前検証はAcornによる同期式構文検査に加え、DOM、通信、ストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作に関係する識別子を拒否します。禁止トークン検査は製品ポリシーの補助であり、計算プロパティを含む隔離の境界はguestとホストの間にあるQuickJS VMとJSONデータ境界です。QuickJS-Emscriptenが1.0未満で未監査であること、生成TypeScriptは隔離されないことは残存リスクです。
 
