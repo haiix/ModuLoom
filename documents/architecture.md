@@ -6,7 +6,8 @@ ModuLoom は、React の状態としてグラフを保持し、ブラウザ内�
 
 ```text
 React UI
-  ├─ App: グラフ・評価結果・表示状態の統合
+  ├─ App: 画面構成と機能間の調停
+  ├─ hooks: 編集履歴・評価・復元・自動保存・viewport
   ├─ Canvas / NodeView: 編集と結果表示
   ├─ NodeLibrary / 各種モーダル: 定義の作成
   └─ Toolbar / CanvasControls / TopologicalVisualizer: 操作と実行順表示
@@ -48,6 +49,11 @@ Graph model (NodeInstance + Connection + NodeDefinition)
 ノードIDをキーとして、解決済み入力、出力、エラー、実行時間、保留中・ストリーム中・キャッシュ利用などの実行メタデータを保持します。
 
 ## ノード定義の組み立て
+
+組み込み評価実装は `src/nodes/builtins/` のカテゴリ別モジュールに置きます。各モジュールは
+同じカテゴリの `NodeDefinition[]` だけを公開し、`src/nodes/definitions.ts` がそれらを集約して
+表示メタデータ、コード生成メタデータ、プリセットと結合します。利用側はカテゴリ別ファイルを
+直接参照せず、互換APIである `BUILTIN_NODES` と `PRESETS` を `definitions.ts` から読み込みます。
 
 実行時の定義一覧は次の順で結合され、`typeId` をキーに Map 化されます。
 
@@ -218,6 +224,23 @@ hiddenになる場合とpagehideでも未反映分の保存を開始します。
 Worker初期化はいずれも確認前に開始されません。アプリ内で作成した式と外部JSON読込時に明示
 承認した式は、次回の自動保存で現在内容のfingerprintを記録します。
 
+## モジュール境界
+
+依存方向は `App / components → hooks → engine / nodes / types` を基本とします。`engine` はReact、
+`components`、`hooks` に依存しません。循環依存とこの逆依存は `moduleBoundaries.test.ts` で検査します。
+
+- `App.tsx` は画面構成、モーダルの開閉、機能間イベントの調停を担当します。
+- `useEditorDocument` は `EditorHistory` の更新、Undo／Redo、保存済み状態を公開します。
+- `useGraphEvaluation` は差分検出、同期・非同期評価、キャンセル、再評価統計を公開します。
+- `useRecoveryBootstrap` と `useRecoveryAutosave` は信頼確認、IndexedDB復元、競合検出を担当します。
+- `useCanvasViewport` はズームとパンだけを管理し、編集履歴には含めません。
+- `graphEditing.ts` はコピー、貼り付け、削除、整列の純粋な編集APIです。UI状態を持ちません。
+- `NodeView.tsx` はノード外枠を構成し、ヘッダー、入力編集、出力表示、ポートを
+  `components/node-view/` の単一責務コンポーネントへ委譲します。
+
+新機能はこの公開境界を経由し、評価規則をコンポーネントやhookへ複製しません。プロジェクトJSONの
+互換境界は引き続き `projectSerialization.ts` と `projectFormat.ts` です。
+
 ## レスポンシブ操作UI
 
 `Toolbar` はノード追加、保存、読み込み、実行を常設し、補助操作を単一のオーバーフローメニューへまとめます。`toolbarLayout.ts` が画面幅からブランド名と操作ラベルの表示密度を決め、ヘッダー自体は折り返しません。評価方式と表示倍率は `CanvasControls` としてキャンバス右下へ分離しています。アイコンだけになる操作も `aria-label` を持ち、オーバーフローメニューは開閉、フォーカス移動、選択をキーボードで実行できます。
@@ -230,7 +253,12 @@ Worker初期化はいずれも確認前に開始されません。アプリ内�
 
 | ファイル                             | 責務                                         |
 | ------------------------------------ | -------------------------------------------- |
-| `src/App.tsx`                        | 状態統合、差分評価、操作ハンドラー、画面構成 |
+| `src/App.tsx`                        | 画面構成と機能間イベントの調停               |
+| `src/hooks/useEditorDocument.ts`     | 編集履歴、Undo／Redo、保存済み状態           |
+| `src/hooks/useGraphEvaluation.ts`    | 差分評価、非同期キャンセル、再評価           |
+| `src/hooks/useRecoveryBootstrap.ts`  | 起動時の復元検証と自作式の信頼確認           |
+| `src/hooks/useRecoveryAutosave.ts`   | 自動保存、タブ間競合、離脱警告               |
+| `src/hooks/useCanvasViewport.ts`     | ズームとパンの状態                           |
 | `src/types.ts`                       | グラフ、型、評価結果、保存形式の型定義       |
 | `src/engine/dagEngine.ts`            | DAG 操作、同期・非同期評価、複合評価、TS生成 |
 | `src/engine/typeSystem.ts`           | 型互換性、値型判定、表示整形                 |
@@ -243,12 +271,14 @@ Worker初期化はいずれも確認前に開始されません。アプリ内�
 | `src/engine/customCodeVm.ts`         | QuickJS moduleと評価別Runtime/Context管理    |
 | `src/engine/projectTrust.ts`         | 読み込み時の実行コード信頼判定               |
 | `src/engine/executionDebugger.ts`    | 逐次実行、停止、トレース、エラー経路         |
-| `src/nodes/definitions.ts`           | 同期組み込みノードとプリセット               |
+| `src/nodes/definitions.ts`           | 組み込み定義の集約、メタデータ、プリセット   |
+| `src/nodes/builtins/*.ts`            | カテゴリ別の組み込み評価実装                 |
 | `src/nodes/asyncStreamNodes.ts`      | 非同期・ストリームノード                     |
 | `src/nodes/customTypeNodes.ts`       | カスタム型由来ノードとコード生成定義         |
 | `src/nodes/codegen.ts`               | 組み込みノードのコード生成メタデータ         |
 | `src/components/Canvas.tsx`          | キャンバス操作、接続検証、ワイヤー描画       |
-| `src/components/NodeView.tsx`        | ノードフォーム、ポート、状態・結果表示       |
+| `src/components/NodeView.tsx`        | ノード外枠と単一責務部品の構成               |
+| `src/components/node-view/*.tsx`     | ヘッダー、入力、出力、ポートの表示           |
 | `src/components/Toolbar.tsx`         | 常設操作とレスポンシブな補助操作メニュー     |
 | `src/components/CanvasControls.tsx`  | 評価方式、実行、ズームなどのキャンバス操作   |
 | `src/components/toolbarLayout.ts`    | 画面幅に応じたツールバー表示密度             |
