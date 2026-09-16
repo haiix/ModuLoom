@@ -107,6 +107,7 @@ export interface NodeDefinition {
 }
 
 export interface EvaluationContext {
+  /** Aborted when this evaluation is superseded, the graph changes, or debugging stops. */
   signal?: AbortSignal;
 }
 

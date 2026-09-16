@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DagExecutionDebugger } from '../src/engine/executionDebugger';
 import { evaluateGraph } from '../src/engine/dagEngine';
 import type { Connection, GraphEvaluation, NodeDefinition, NodeInstance } from '../src/types';
@@ -164,24 +164,19 @@ describe('DAG execution debugger', () => {
     expect(session.getSnapshot().status).toBe('cancelled');
     expect(session.getSnapshot().traces.async).toMatchObject({
       status: 'cancelled',
-      error: 'デバッグ実行がキャンセルされました。',
     });
+    expect(session.getSnapshot().traces.async.error).toBeUndefined();
   });
 
   it('calls stream cancellation and iterator return when stopped while collecting', async () => {
-    let streamCancelled = false;
-    let iteratorReturned = false;
+    const streamCancelled = vi.fn();
+    const iteratorReturned = vi.fn(async () => ({ done: true as const, value: undefined }));
     const stream = {
-      cancel: () => {
-        streamCancelled = true;
-      },
+      cancel: streamCancelled,
       [Symbol.asyncIterator]() {
         return {
           next: () => new Promise<IteratorResult<number>>(() => {}),
-          return: async () => {
-            iteratorReturned = true;
-            return { done: true as const, value: undefined };
-          },
+          return: iteratorReturned,
         };
       },
     };
@@ -231,9 +226,10 @@ describe('DAG execution debugger', () => {
     session.cancel();
     await collecting;
 
-    expect(streamCancelled).toBe(true);
-    expect(iteratorReturned).toBe(true);
+    expect(streamCancelled).toHaveBeenCalledTimes(1);
+    expect(iteratorReturned).toHaveBeenCalledTimes(1);
     expect(session.getSnapshot().traces.collect.status).toBe('cancelled');
+    expect(session.getSnapshot().traces.collect.error).toBeUndefined();
   });
 
   it('does not change normal reactive graph evaluation behavior', () => {

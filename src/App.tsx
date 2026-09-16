@@ -530,6 +530,7 @@ function EditorApp({
 
   // Reactive Graph Evaluation (synchronous fast-pass + asynchronous live streaming)
   const [evaluation, setEvaluation] = useState<GraphEvaluation>({});
+  const lastManualEvalTriggerRef = useRef(0);
 
   // Previous graph snapshot for incremental dirty node tracking
   const prevGraphSnapshotRef = useRef<{
@@ -543,6 +544,14 @@ function EditorApp({
   // Keep latest evaluation in a ref so incremental evaluation can reuse cached node outputs
   const evaluationRef = useRef<GraphEvaluation>({});
   evaluationRef.current = evaluation;
+  const activeEvaluationAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(
+    () => () => {
+      activeEvaluationAbortRef.current?.abort();
+    },
+    [],
+  );
 
   // Track incremental calculation stats (how many nodes were recomputed vs cached)
   const [evalStats, setEvalStats] = useState<{
@@ -556,20 +565,21 @@ function EditorApp({
   });
 
   useEffect(() => {
-    if (!isLiveReactive && manualEvalTrigger === 0) {
-      setEvaluation({});
+    const manualEvaluationRequested = manualEvalTrigger !== lastManualEvalTriggerRef.current;
+    lastManualEvalTriggerRef.current = manualEvalTrigger;
+    if (!isLiveReactive && !manualEvaluationRequested) {
+      activeEvaluationAbortRef.current?.abort();
+      activeEvaluationAbortRef.current = null;
+      if (manualEvalTrigger === 0) setEvaluation({});
       return;
     }
 
     const prevSnapshot = prevGraphSnapshotRef.current;
 
     // Detect dirty seed nodes between previous state and current state
-    const dirtySeeds = detectDirtySeedNodeIds(
-      prevSnapshot.nodes,
-      nodes,
-      prevSnapshot.connections,
-      connections,
-    );
+    const dirtySeeds = manualEvaluationRequested
+      ? ('all' as const)
+      : detectDirtySeedNodeIds(prevSnapshot.nodes, nodes, prevSnapshot.connections, connections);
 
     // Save snapshot for next update
     prevGraphSnapshotRef.current = {
@@ -581,6 +591,9 @@ function EditorApp({
     if (dirtySeeds !== 'all' && dirtySeeds.size === 0) {
       return;
     }
+
+    activeEvaluationAbortRef.current?.abort();
+    activeEvaluationAbortRef.current = null;
 
     // Determine the full set of dirty nodes: seed nodes + all reachable downstream nodes!
     let dirtyNodeIds: Set<string> | undefined;
@@ -614,17 +627,18 @@ function EditorApp({
 
     if (!hasDirtyAsyncOrStream) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
+    activeEvaluationAbortRef.current = controller;
 
     // Step 3: Run asynchronous DAG evaluation (only re-running dirty nodes!)
-    evaluateGraphAsync(
+    void evaluateGraphAsync(
       nodes,
       connections,
       definitionsMap,
       syncEval,
       dirtyNodeIds,
       (nodeId, partial) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setEvaluation((prev) => ({
           ...prev,
           [nodeId]: {
@@ -633,16 +647,12 @@ function EditorApp({
           },
         }));
       },
-      () => cancelled,
+      controller.signal,
     ).then((finalEval) => {
-      if (!cancelled) {
+      if (!controller.signal.aborted) {
         setEvaluation(finalEval);
       }
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, [nodes, connections, definitionsMap, isLiveReactive, manualEvalTrigger]);
 
   const displayedEvaluation = debugSnapshot?.evaluation ?? evaluation;
@@ -707,6 +717,8 @@ function EditorApp({
     (nodeId: string) => {
       const dirtyNodeIds = getDownstreamNodeIds(new Set([nodeId]), connections);
       const dirtyList = Array.from(dirtyNodeIds);
+      activeEvaluationAbortRef.current?.abort();
+      activeEvaluationAbortRef.current = null;
 
       setEvalStats({
         dirtyCount: dirtyList.length,
@@ -731,15 +743,16 @@ function EditorApp({
       });
 
       if (hasDirtyAsyncOrStream) {
-        const cancelled = false;
-        evaluateGraphAsync(
+        const controller = new AbortController();
+        activeEvaluationAbortRef.current = controller;
+        void evaluateGraphAsync(
           nodes,
           connections,
           definitionsMap,
           syncEval,
           dirtyNodeIds,
           (nid, partial) => {
-            if (cancelled) return;
+            if (controller.signal.aborted) return;
             setEvaluation((prev) => ({
               ...prev,
               [nid]: {
@@ -748,9 +761,9 @@ function EditorApp({
               },
             }));
           },
-          () => cancelled,
+          controller.signal,
         ).then((finalEval) => {
-          if (!cancelled) {
+          if (!controller.signal.aborted) {
             setEvaluation(finalEval);
           }
         });
