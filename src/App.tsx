@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback, type SetStateAction } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   NodeDefinition,
   NodeInstance,
   Connection,
-  GraphEvaluation,
   CustomTypeDefinition,
   LoadedFlowProject,
   GraphPreset,
@@ -11,12 +10,8 @@ import {
 import { BUILTIN_NODES, PRESETS } from './nodes/definitions';
 import { generateNodesForCustomType } from './nodes/customTypeNodes';
 import {
-  evaluateGraph,
-  evaluateGraphAsync,
   getTopologicalOrder,
   generateTypeScriptCode,
-  detectDirtySeedNodeIds,
-  getDownstreamNodeIds,
   unpackCompositeNode,
 } from './engine/dagEngine';
 import { Canvas } from './components/Canvas';
@@ -41,38 +36,8 @@ import { CodeExportModal } from './components/CodeExportModal';
 import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { PresetGalleryModal } from './components/PresetGalleryModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
-import {
-  createRecoverySnapshot,
-  serializeFlowProject,
-  type ParsedRecoverySnapshot,
-} from './engine/projectSerialization';
-import {
-  discardRecoverySnapshot,
-  InvalidRecoverySnapshotError,
-  loadRecoverySnapshot,
-  RecoveryConflictError,
-  saveRecoverySnapshot,
-} from './engine/recoveryStorage';
-import {
-  DebouncedSave,
-  shouldWarnBeforeUnload,
-  type DebouncedSaveStatus,
-} from './engine/debouncedSave';
-import {
-  createProjectCodeFingerprint,
-  recoverySnapshotHasTrustedCode,
-} from './engine/projectTrust';
+import { serializeFlowProject, type ParsedRecoverySnapshot } from './engine/projectSerialization';
 import { DagExecutionDebugger, type ExecutionDebuggerSnapshot } from './engine/executionDebugger';
-import {
-  commitEditorDocument,
-  createEditorHistory,
-  finishEditorHistoryGroup,
-  isEditorDocumentDirty,
-  markEditorDocumentSaved,
-  redoEditorHistory,
-  undoEditorHistory,
-  type EditorDocument,
-} from './engine/editorHistory';
 import { insertPreset, openPresetAsNew } from './engine/presetApplication';
 import {
   alignSelectedNodes,
@@ -84,114 +49,14 @@ import {
   type Distribution,
   type GraphClipboard,
 } from './engine/graphEditing';
-
-interface RecoveryBootstrapState {
-  loading: boolean;
-  snapshot: ParsedRecoverySnapshot | null;
-  pendingTrustSnapshot: ParsedRecoverySnapshot | null;
-  warning: string | null;
-  requiresDiscard: boolean;
-}
+import { useRecoveryBootstrap } from './hooks/useRecoveryBootstrap';
+import { useRecoveryAutosave } from './hooks/useRecoveryAutosave';
+import { useGraphEvaluation } from './hooks/useGraphEvaluation';
+import { useEditorDocument } from './hooks/useEditorDocument';
+import { useCanvasViewport } from './hooks/useCanvasViewport';
 
 export default function App() {
-  const [recovery, setRecovery] = useState<RecoveryBootstrapState>({
-    loading: true,
-    snapshot: null,
-    pendingTrustSnapshot: null,
-    warning: null,
-    requiresDiscard: false,
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadRecoverySnapshot()
-      .then(async (snapshot) => {
-        if (cancelled) return;
-        if (snapshot && !(await recoverySnapshotHasTrustedCode(snapshot))) {
-          if (cancelled) return;
-          setRecovery({
-            loading: false,
-            snapshot: null,
-            pendingTrustSnapshot: snapshot,
-            warning: null,
-            requiresDiscard: false,
-          });
-          return;
-        }
-        setRecovery({
-          loading: false,
-          snapshot,
-          pendingTrustSnapshot: null,
-          warning: null,
-          requiresDiscard: false,
-        });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setRecovery({
-          loading: false,
-          snapshot: null,
-          pendingTrustSnapshot: null,
-          warning: error instanceof Error ? error.message : '復元データを読み込めませんでした。',
-          requiresDiscard: error instanceof InvalidRecoverySnapshotError,
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleDiscardRecovery = async () => {
-    try {
-      await discardRecoverySnapshot();
-      setRecovery((current) => ({
-        ...current,
-        warning: null,
-        requiresDiscard: false,
-        pendingTrustSnapshot: null,
-      }));
-    } catch (error) {
-      setRecovery((current) => ({
-        ...current,
-        warning: error instanceof Error ? error.message : '復元データを破棄できませんでした。',
-      }));
-    }
-  };
-
-  const handleTrustRecovery = async () => {
-    const snapshot = recovery.pendingTrustSnapshot;
-    if (!snapshot) return;
-    try {
-      const trustedCodeFingerprint = await createProjectCodeFingerprint(snapshot.project);
-      if (!trustedCodeFingerprint) throw new Error('信頼対象の自作式が見つかりません。');
-      const project = serializeFlowProject({
-        document: {
-          nodes: snapshot.project.nodes,
-          connections: snapshot.project.connections,
-          customDefinitions: snapshot.project.customDefinitions ?? [],
-          customTypes: snapshot.project.customTypes ?? [],
-        },
-        viewport: snapshot.project.viewport ?? { zoom: 1, pan: { x: 60, y: 80 } },
-        exportedAt: snapshot.project.exportedAt,
-      });
-      await saveRecoverySnapshot(
-        { ...snapshot, project, trustedCodeFingerprint },
-        snapshot.revision,
-      );
-      setRecovery({
-        loading: false,
-        snapshot: { ...snapshot, trustedCodeFingerprint },
-        pendingTrustSnapshot: null,
-        warning: null,
-        requiresDiscard: false,
-      });
-    } catch (error) {
-      setRecovery((current) => ({
-        ...current,
-        warning: error instanceof Error ? error.message : '信頼情報を保存できませんでした。',
-      }));
-    }
-  };
+  const { recovery, discardRecovery, trustRecovery } = useRecoveryBootstrap();
 
   if (recovery.loading) {
     return (
@@ -215,13 +80,13 @@ export default function App() {
           <div className="mt-5 flex gap-3">
             <button
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
-              onClick={() => void handleTrustRecovery()}
+              onClick={() => void trustRecovery()}
             >
               信頼して復元
             </button>
             <button
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
-              onClick={() => void handleDiscardRecovery()}
+              onClick={() => void discardRecovery()}
             >
               復元データを破棄
             </button>
@@ -236,45 +101,8 @@ export default function App() {
       initialSnapshot={recovery.snapshot}
       recoveryWarning={recovery.warning}
       autosaveEnabled={!recovery.requiresDiscard}
-      onDiscardRecovery={() => void handleDiscardRecovery()}
+      onDiscardRecovery={() => void discardRecovery()}
     />
-  );
-}
-
-interface RecoverySaveInput {
-  document: EditorDocument;
-  viewport: { zoom: number; pan: { x: number; y: number } };
-  wasDirty: boolean;
-}
-
-interface RecoveryUpdateMessage {
-  type: 'snapshot-saved';
-  writerId: string;
-  revision: number;
-  updatedAt: string;
-}
-
-interface AutosaveConflict {
-  revision: number;
-  updatedAt: string;
-}
-
-const RECOVERY_CHANNEL_NAME = 'moduloom-recovery-updates';
-
-function createRecoveryWriterId(): string {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  const randomPart = crypto.getRandomValues(new Uint32Array(2)).join('-');
-  return `${Date.now()}-${randomPart}`;
-}
-
-function isRecoveryUpdateMessage(value: unknown): value is RecoveryUpdateMessage {
-  if (!value || typeof value !== 'object') return false;
-  const message = value as Partial<RecoveryUpdateMessage>;
-  return (
-    message.type === 'snapshot-saved' &&
-    typeof message.writerId === 'string' &&
-    Number.isSafeInteger(message.revision) &&
-    typeof message.updatedAt === 'string'
   );
 }
 
@@ -292,178 +120,49 @@ function EditorApp({
   onDiscardRecovery,
 }: EditorAppProps) {
   const initialProject = initialSnapshot?.project;
-  // Empty graph as initial state (no sample nodes by default)
-  const [editorHistory, setEditorHistory] = useState(() =>
-    createEditorHistory({
-      nodes: initialProject?.nodes ?? [],
-      connections: initialProject?.connections ?? [],
-      customDefinitions: initialProject?.customDefinitions ?? [],
-      customTypes: initialProject?.customTypes ?? [],
-    }),
-  );
-  const { nodes, connections, customDefinitions, customTypes } = editorHistory.present;
-  const isDirty = isEditorDocumentDirty(editorHistory);
+  const {
+    history: editorHistory,
+    document: editorDocument,
+    isDirty,
+    updateDocument: updateEditorDocument,
+    setNodes,
+    setConnections,
+    setCustomDefinitions,
+    setCustomTypes,
+    finishHistoryGroup,
+    undo,
+    redo,
+    markSaved,
+    resetDocument,
+    loadDocument,
+  } = useEditorDocument({
+    nodes: initialProject?.nodes ?? [],
+    connections: initialProject?.connections ?? [],
+    customDefinitions: initialProject?.customDefinitions ?? [],
+    customTypes: initialProject?.customTypes ?? [],
+  });
+  const { nodes, connections, customDefinitions, customTypes } = editorDocument;
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const graphClipboardRef = useRef<GraphClipboard | null>(null);
   const pasteCountRef = useRef(0);
 
-  const updateEditorDocument = useCallback(
-    (update: (document: EditorDocument) => EditorDocument, groupKey?: string) => {
-      setEditorHistory((history) =>
-        commitEditorDocument(history, update(history.present), groupKey),
-      );
-    },
-    [],
+  const { zoom, setZoom, pan, setPan, setViewport, resetViewport } = useCanvasViewport(
+    initialProject?.viewport,
   );
-  const updateField = useCallback(
-    <K extends keyof EditorDocument>(key: K, action: SetStateAction<EditorDocument[K]>) => {
-      updateEditorDocument((document) => ({
-        ...document,
-        [key]: typeof action === 'function' ? action(document[key]) : action,
-      }));
-    },
-    [updateEditorDocument],
-  );
-  const setNodes = useCallback(
-    (action: SetStateAction<NodeInstance[]>) => updateField('nodes', action),
-    [updateField],
-  );
-  const setConnections = useCallback(
-    (action: SetStateAction<Connection[]>) => updateField('connections', action),
-    [updateField],
-  );
-  const setCustomDefinitions = useCallback(
-    (action: SetStateAction<NodeDefinition[]>) => updateField('customDefinitions', action),
-    [updateField],
-  );
-  const setCustomTypes = useCallback(
-    (action: SetStateAction<CustomTypeDefinition[]>) => updateField('customTypes', action),
-    [updateField],
-  );
-
-  // Canvas viewport
-  const [zoom, setZoom] = useState<number>(initialProject?.viewport?.zoom ?? 1.0);
-  const [pan, setPan] = useState<{ x: number; y: number }>(
-    initialProject?.viewport?.pan ?? { x: 0, y: 0 },
-  );
-  const [autosaveError, setAutosaveError] = useState<string | null>(null);
-  const [browserSaveStatus, setBrowserSaveStatus] = useState<DebouncedSaveStatus>(
-    initialSnapshot ? 'saved' : 'idle',
-  );
-  const [autosaveConflict, setAutosaveConflict] = useState<AutosaveConflict | null>(null);
-  const [showRecoveryNotice, setShowRecoveryNotice] = useState(Boolean(initialSnapshot));
-  const writerIdRef = useRef(createRecoveryWriterId());
-  const revisionRef = useRef<number | null>(initialSnapshot?.revision ?? null);
-  const recoveryChannelRef = useRef<BroadcastChannel | null>(null);
-  const lastAutosaveInputRef = useRef<RecoverySaveInput>({
+  const {
+    autosaveError,
+    browserSaveStatus,
+    autosaveConflict,
+    showRecoveryNotice,
+    setShowRecoveryNotice,
+    resetAutosaveState,
+  } = useRecoveryAutosave({
+    initialSnapshot,
     document: editorHistory.present,
     viewport: { zoom, pan },
-    wasDirty: isDirty,
+    isDirty,
+    enabled: autosaveEnabled,
   });
-  const saveSchedulerRef = useRef<DebouncedSave<RecoverySaveInput> | null>(null);
-  const enterAutosaveConflict = useCallback((conflict: AutosaveConflict) => {
-    saveSchedulerRef.current?.dispose();
-    setAutosaveConflict(conflict);
-    setAutosaveError(null);
-    setBrowserSaveStatus('error');
-  }, []);
-  if (saveSchedulerRef.current === null) {
-    saveSchedulerRef.current = new DebouncedSave(
-      async ({ document, viewport, wasDirty }) => {
-        const now = new Date().toISOString();
-        const project = serializeFlowProject({ document, viewport, exportedAt: now });
-        const trustedCodeFingerprint = await createProjectCodeFingerprint(project);
-        const expectedRevision = revisionRef.current;
-        const revision = (expectedRevision ?? 0) + 1;
-        const writerId = writerIdRef.current;
-        await saveRecoverySnapshot(
-          createRecoverySnapshot(project, {
-            updatedAt: now,
-            revision,
-            writerId,
-            wasDirty,
-            ...(trustedCodeFingerprint ? { trustedCodeFingerprint } : {}),
-          }),
-          expectedRevision,
-        );
-        revisionRef.current = revision;
-        recoveryChannelRef.current?.postMessage({
-          type: 'snapshot-saved',
-          writerId,
-          revision,
-          updatedAt: now,
-        } satisfies RecoveryUpdateMessage);
-        setAutosaveError(null);
-      },
-      {
-        delayMs: 400,
-        maxWaitMs: 2_000,
-        onError: (error) => {
-          if (error instanceof RecoveryConflictError) {
-            enterAutosaveConflict({
-              revision: error.currentSnapshot.revision,
-              updatedAt: error.currentSnapshot.updatedAt,
-            });
-            return;
-          }
-          setAutosaveError(
-            error instanceof Error ? error.message : 'プロジェクトを自動保存できませんでした。',
-          );
-        },
-        onStatusChange: setBrowserSaveStatus,
-      },
-    );
-  }
-
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel(RECOVERY_CHANNEL_NAME);
-    recoveryChannelRef.current = channel;
-    channel.onmessage = ({ data }: MessageEvent<unknown>) => {
-      if (!isRecoveryUpdateMessage(data) || data.writerId === writerIdRef.current) return;
-      if (data.revision <= (revisionRef.current ?? -1)) return;
-      enterAutosaveConflict({ revision: data.revision, updatedAt: data.updatedAt });
-    };
-    return () => {
-      recoveryChannelRef.current = null;
-      channel.close();
-    };
-  }, [enterAutosaveConflict]);
-
-  useEffect(() => {
-    if (!autosaveEnabled || autosaveConflict) return;
-    const nextInput: RecoverySaveInput = {
-      document: editorHistory.present,
-      viewport: { zoom, pan },
-      wasDirty: isDirty,
-    };
-    const previousInput = lastAutosaveInputRef.current;
-    if (
-      previousInput.document === nextInput.document &&
-      previousInput.viewport.zoom === nextInput.viewport.zoom &&
-      previousInput.viewport.pan.x === nextInput.viewport.pan.x &&
-      previousInput.viewport.pan.y === nextInput.viewport.pan.y &&
-      previousInput.wasDirty === nextInput.wasDirty
-    ) {
-      return;
-    }
-    lastAutosaveInputRef.current = nextInput;
-    saveSchedulerRef.current?.schedule(nextInput);
-  }, [autosaveConflict, autosaveEnabled, editorHistory.present, isDirty, pan, zoom]);
-
-  useEffect(() => {
-    const flushPendingSave = () => void saveSchedulerRef.current?.flush();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flushPendingSave();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', flushPendingSave);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', flushPendingSave);
-      saveSchedulerRef.current?.dispose();
-    };
-  }, []);
 
   // UI Drawer & Modal States
   const [isLibraryOpen, setIsLibraryOpen] = useState(() =>
@@ -496,10 +195,6 @@ function EditorApp({
     }
   }, [isLibraryOpen]);
 
-  // Engine evaluation settings
-  const [isLiveReactive, setIsLiveReactive] = useState(true);
-  const [manualEvalTrigger, setManualEvalTrigger] = useState(0);
-
   // Isolated execution debugger state. Normal reactive evaluation remains in `evaluation`.
   const executionDebuggerRef = useRef<DagExecutionDebugger | null>(null);
   const [debugSnapshot, setDebugSnapshot] = useState<ExecutionDebuggerSnapshot | null>(null);
@@ -528,132 +223,16 @@ function EditorApp({
     return getTopologicalOrder(nodes, connections);
   }, [nodes, connections]);
 
-  // Reactive Graph Evaluation (synchronous fast-pass + asynchronous live streaming)
-  const [evaluation, setEvaluation] = useState<GraphEvaluation>({});
-  const lastManualEvalTriggerRef = useRef(0);
-
-  // Previous graph snapshot for incremental dirty node tracking
-  const prevGraphSnapshotRef = useRef<{
-    nodes: NodeInstance[];
-    connections: Connection[];
-  }>({
-    nodes: [],
-    connections: [],
-  });
-
-  // Keep latest evaluation in a ref so incremental evaluation can reuse cached node outputs
-  const evaluationRef = useRef<GraphEvaluation>({});
-  evaluationRef.current = evaluation;
-  const activeEvaluationAbortRef = useRef<AbortController | null>(null);
-
-  useEffect(
-    () => () => {
-      activeEvaluationAbortRef.current?.abort();
-    },
-    [],
-  );
-
-  // Track incremental calculation stats (how many nodes were recomputed vs cached)
-  const [evalStats, setEvalStats] = useState<{
-    dirtyCount: number;
-    totalCount: number;
-    lastDirtyNodeIds: string[];
-  }>({
-    dirtyCount: 0,
-    totalCount: 0,
-    lastDirtyNodeIds: [],
-  });
-
-  useEffect(() => {
-    const manualEvaluationRequested = manualEvalTrigger !== lastManualEvalTriggerRef.current;
-    lastManualEvalTriggerRef.current = manualEvalTrigger;
-    if (!isLiveReactive && !manualEvaluationRequested) {
-      activeEvaluationAbortRef.current?.abort();
-      activeEvaluationAbortRef.current = null;
-      if (manualEvalTrigger === 0) setEvaluation({});
-      return;
-    }
-
-    const prevSnapshot = prevGraphSnapshotRef.current;
-
-    // Detect dirty seed nodes between previous state and current state
-    const dirtySeeds = manualEvaluationRequested
-      ? ('all' as const)
-      : detectDirtySeedNodeIds(prevSnapshot.nodes, nodes, prevSnapshot.connections, connections);
-
-    // Save snapshot for next update
-    prevGraphSnapshotRef.current = {
-      nodes: nodes.map((n) => ({ ...n })),
-      connections: [...connections],
-    };
-
-    // If nothing functionally changed (e.g. only node position x, y changed or pan/zoom)
-    if (dirtySeeds !== 'all' && dirtySeeds.size === 0) {
-      return;
-    }
-
-    activeEvaluationAbortRef.current?.abort();
-    activeEvaluationAbortRef.current = null;
-
-    // Determine the full set of dirty nodes: seed nodes + all reachable downstream nodes!
-    let dirtyNodeIds: Set<string> | undefined;
-    if (dirtySeeds !== 'all') {
-      dirtyNodeIds = getDownstreamNodeIds(dirtySeeds, connections);
-    }
-
-    const dirtyList = dirtyNodeIds ? Array.from(dirtyNodeIds) : nodes.map((n) => n.id);
-    setEvalStats({
-      dirtyCount: dirtyList.length,
-      totalCount: nodes.length,
-      lastDirtyNodeIds: dirtyList,
-    });
-
-    // Step 1: Immediate synchronous calculation (only recomputes dirty nodes, reuses cache for others)
-    const syncEval = evaluateGraph(
-      nodes,
-      connections,
-      definitionsMap,
-      evaluationRef.current,
-      dirtyNodeIds,
-    );
-    setEvaluation(syncEval);
-
-    // Step 2: Check if any DIRTY node is async or stream
-    const hasDirtyAsyncOrStream = nodes.some((n) => {
-      if (dirtyNodeIds && !dirtyNodeIds.has(n.id)) return false;
-      const def = definitionsMap.get(n.typeId);
-      return def?.isAsync || def?.category === 'Async' || def?.category === 'Stream';
-    });
-
-    if (!hasDirtyAsyncOrStream) return;
-
-    const controller = new AbortController();
-    activeEvaluationAbortRef.current = controller;
-
-    // Step 3: Run asynchronous DAG evaluation (only re-running dirty nodes!)
-    void evaluateGraphAsync(
-      nodes,
-      connections,
-      definitionsMap,
-      syncEval,
-      dirtyNodeIds,
-      (nodeId, partial) => {
-        if (controller.signal.aborted) return;
-        setEvaluation((prev) => ({
-          ...prev,
-          [nodeId]: {
-            ...(prev[nodeId] || {}),
-            ...partial,
-          },
-        }));
-      },
-      controller.signal,
-    ).then((finalEval) => {
-      if (!controller.signal.aborted) {
-        setEvaluation(finalEval);
-      }
-    });
-  }, [nodes, connections, definitionsMap, isLiveReactive, manualEvalTrigger]);
+  const {
+    evaluation,
+    evalStats,
+    isLiveReactive,
+    setIsLiveReactive,
+    requestManualEvaluation,
+    reevaluateNode: handleReevaluateNode,
+    resetEvaluationState,
+    getCurrentEvaluation,
+  } = useGraphEvaluation(nodes, connections, definitionsMap);
 
   const displayedEvaluation = debugSnapshot?.evaluation ?? evaluation;
   const stepActiveNodeId = debugSnapshot?.nextNodeId ?? null;
@@ -670,8 +249,8 @@ function EditorApp({
 
   // Handlers for Canvas & Graph Manipulation
   const handleFinishNodeDrag = useCallback(() => {
-    setEditorHistory(finishEditorHistoryGroup);
-  }, []);
+    finishHistoryGroup();
+  }, [finishHistoryGroup]);
 
   const handleUpdateNodePositions = useCallback(
     (positions: Map<string, { x: number; y: number }>) => {
@@ -711,66 +290,6 @@ function EditorApp({
       return next;
     });
   };
-
-  // Reevaluate specific node and its downstream dependencies
-  const handleReevaluateNode = useCallback(
-    (nodeId: string) => {
-      const dirtyNodeIds = getDownstreamNodeIds(new Set([nodeId]), connections);
-      const dirtyList = Array.from(dirtyNodeIds);
-      activeEvaluationAbortRef.current?.abort();
-      activeEvaluationAbortRef.current = null;
-
-      setEvalStats({
-        dirtyCount: dirtyList.length,
-        totalCount: nodes.length,
-        lastDirtyNodeIds: dirtyList,
-      });
-
-      // Clear previous cache for dirty nodes so they are freshly executed
-      const prevEval = { ...evaluationRef.current };
-      for (const id of dirtyNodeIds) {
-        delete prevEval[id];
-      }
-
-      const syncEval = evaluateGraph(nodes, connections, definitionsMap, prevEval, dirtyNodeIds);
-      setEvaluation(syncEval);
-
-      // Check for async/stream nodes among dirty nodes
-      const hasDirtyAsyncOrStream = nodes.some((n) => {
-        if (!dirtyNodeIds.has(n.id)) return false;
-        const def = definitionsMap.get(n.typeId);
-        return def?.isAsync || def?.category === 'Async' || def?.category === 'Stream';
-      });
-
-      if (hasDirtyAsyncOrStream) {
-        const controller = new AbortController();
-        activeEvaluationAbortRef.current = controller;
-        void evaluateGraphAsync(
-          nodes,
-          connections,
-          definitionsMap,
-          syncEval,
-          dirtyNodeIds,
-          (nid, partial) => {
-            if (controller.signal.aborted) return;
-            setEvaluation((prev) => ({
-              ...prev,
-              [nid]: {
-                ...(prev[nid] || {}),
-                ...partial,
-              },
-            }));
-          },
-          controller.signal,
-        ).then((finalEval) => {
-          if (!controller.signal.aborted) {
-            setEvaluation(finalEval);
-          }
-        });
-      }
-    },
-    [nodes, connections, definitionsMap],
-  );
 
   const handleAddConnection = (newConn: Connection) => {
     setConnections((prev) => [
@@ -883,11 +402,10 @@ function EditorApp({
   };
 
   const resetExecutionState = () => {
-    prevGraphSnapshotRef.current = { nodes: [], connections: [] };
     executionDebuggerRef.current?.cancel();
     executionDebuggerRef.current = null;
     setDebugSnapshot(null);
-    setEvaluation({});
+    resetEvaluationState();
   };
 
   const handleOpenPreset = (preset: GraphPreset): string | undefined => {
@@ -933,33 +451,20 @@ function EditorApp({
 
   const handleClearGraph = () => {
     if (!window.confirm('キャンバス上のノードと接続をすべて削除しますか？')) return;
-    prevGraphSnapshotRef.current = { nodes: [], connections: [] };
     updateEditorDocument((document) => ({ ...document, nodes: [], connections: [] }));
     executionDebuggerRef.current?.cancel();
     executionDebuggerRef.current = null;
     setDebugSnapshot(null);
-    setEvaluation({});
-    setEvalStats({ dirtyCount: 0, totalCount: 0, lastDirtyNodeIds: [] });
+    resetEvaluationState();
   };
 
   const handleDiscardRestoredWork = () => {
     if (!window.confirm('復元した内容を破棄して新しいプロジェクトを開始しますか？')) return;
-    saveSchedulerRef.current?.dispose();
-    prevGraphSnapshotRef.current = { nodes: [], connections: [] };
-    setEditorHistory(
-      createEditorHistory({
-        nodes: [],
-        connections: [],
-        customDefinitions: [],
-        customTypes: [],
-      }),
-    );
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    resetAutosaveState();
+    resetDocument({ nodes: [], connections: [], customDefinitions: [], customTypes: [] });
+    resetViewport();
     setSelectedNodeIds(new Set());
-    setEvaluation({});
-    setShowRecoveryNotice(false);
-    setBrowserSaveStatus('idle');
+    resetEvaluationState();
   };
 
   const handleSaveCustomNode = (customDef: NodeDefinition) => {
@@ -1361,27 +866,23 @@ function EditorApp({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    setEditorHistory(markEditorDocumentSaved);
-  }, [editorHistory.present, pan, zoom]);
+    markSaved();
+  }, [editorHistory.present, markSaved, pan, zoom]);
 
   // Load JSON project from local file
   const handleLoadProject = (project: LoadedFlowProject) => {
-    prevGraphSnapshotRef.current = { nodes: [], connections: [] };
-    setEditorHistory((history) =>
-      markEditorDocumentSaved(
-        commitEditorDocument(history, {
-          nodes: project.nodes || [],
-          connections: project.connections || [],
-          customTypes: Array.isArray(project.customTypes) ? project.customTypes : [],
-          customDefinitions: Array.isArray(project.customDefinitions)
-            ? project.customDefinitions
-            : [],
-        }),
-      ),
-    );
+    resetEvaluationState();
+    loadDocument({
+      nodes: project.nodes || [],
+      connections: project.connections || [],
+      customTypes: Array.isArray(project.customTypes) ? project.customTypes : [],
+      customDefinitions: Array.isArray(project.customDefinitions) ? project.customDefinitions : [],
+    });
     if (project.viewport) {
-      setZoom(project.viewport.zoom ?? 1.0);
-      setPan(project.viewport.pan ?? { x: 60, y: 80 });
+      setViewport({
+        zoom: project.viewport.zoom ?? 1,
+        pan: project.viewport.pan ?? { x: 60, y: 80 },
+      });
     }
     executionDebuggerRef.current?.cancel();
     executionDebuggerRef.current = null;
@@ -1389,28 +890,18 @@ function EditorApp({
   };
 
   const handleUndo = useCallback(() => {
-    setEditorHistory(undoEditorHistory);
+    undo();
     executionDebuggerRef.current?.cancel();
     executionDebuggerRef.current = null;
     setDebugSnapshot(null);
-  }, []);
+  }, [undo]);
 
   const handleRedo = useCallback(() => {
-    setEditorHistory(redoEditorHistory);
+    redo();
     executionDebuggerRef.current?.cancel();
     executionDebuggerRef.current = null;
     setDebugSnapshot(null);
-  }, []);
-
-  useEffect(() => {
-    if (!shouldWarnBeforeUnload(browserSaveStatus)) return;
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [browserSaveStatus]);
+  }, [redo]);
 
   // Project and history shortcuts. Form controls retain their native undo/redo behavior.
   useEffect(() => {
@@ -1497,7 +988,7 @@ function EditorApp({
         ? new Set(evalStats.lastDirtyNodeIds)
         : undefined;
     const session = new DagExecutionDebugger(nodes, connections, definitionsMap, {
-      previousEvaluation: evaluationRef.current,
+      previousEvaluation: getCurrentEvaluation(),
       dirtyNodeIds,
       breakpoints: breakpointNodeIds,
     });
@@ -1577,7 +1068,7 @@ function EditorApp({
         onRedo={handleRedo}
         customTypes={customTypes}
         onOpenCodeExportModal={() => setIsCodeExportModalOpen(true)}
-        onManualReevaluate={() => setManualEvalTrigger((t) => t + 1)}
+        onManualReevaluate={requestManualEvaluation}
         showDagViewer={showDagViewer}
         onToggleDagViewer={handleToggleDagViewer}
         onOpenOnboarding={() => setShowOnboarding(true)}
@@ -1661,7 +1152,7 @@ function EditorApp({
       <CanvasControls
         isLiveReactive={isLiveReactive}
         onToggleLiveReactive={() => setIsLiveReactive((value) => !value)}
-        onRun={() => setManualEvalTrigger((value) => value + 1)}
+        onRun={requestManualEvaluation}
         evalStats={evalStats}
         zoom={zoom}
         onZoomIn={handleZoomIn}
