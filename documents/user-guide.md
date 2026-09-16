@@ -141,7 +141,7 @@ inputs.a * inputs.b + 10;
 
 保存された式の戻り値は、先頭の出力ポートへ格納されます。出力ポートを複数定義できるUIですが、現行実装では式の結果が設定されるのは先頭ポートだけです。
 
-自作ノードの式はページ本体とは別の Web Worker 内にあるQuickJS VMで実行されるため、DOMやアプリ内部状態へ直接アクセスできません。式は64KiB、入力・戻り値のJSONはそれぞれ1MiBまでです。CPU処理は750ms、VM全体は1秒で停止し、VMはheap 16MiB／stack 512KiBに制限されます。`Promise.resolve`、async式、Promiseの拒否に対応します。永久にpendingとなるPromiseは1秒の期限または評価のキャンセルでWorkerごと停止し、次の評価は新しいWorkerで実行されます。
+自作ノードの式はページ本体とは別の Web Worker 内にあるQuickJS VMで実行されるため、DOMやアプリ内部状態へ直接アクセスできません。式は64KiB、入力・戻り値のJSONはそれぞれ1MiBまでです。QuickJS内の同期処理は1区間あたりCPU 750ms、初期化や待機を含む評価全体は1秒で停止し、VMはheap 16MiB／stack 512KiBに制限されます。`Promise.resolve`、async式、Promiseの拒否に対応します。永久にpendingとなるPromiseは1秒の期限または評価のキャンセルでWorkerごと停止し、次の評価は新しいWorkerで実行されます。
 
 式では `inputs`、JavaScriptの式、標準の値操作、`Math`、`JSON`、`Promise` と、`sleep(ms)` を利用できます。`sleep` は0〜1,000msだけを受け付けるPromiseベースの待機APIです。汎用の `setTimeout`／`setInterval` は公開しません。DOM、通信、ブラウザストレージ、モジュール読込、Worker生成、動的コード生成、プロトタイプ操作は禁止され、対象ノードへエラーが表示されます。
 

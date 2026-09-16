@@ -15,7 +15,7 @@
 - Array / Promise / Streamのポート型は要素型を保持しない
 - 自作ノードは単一式で、式の値は先頭の出力ポートだけに設定
 - 自作式はWeb Worker内のQuickJS VMへ隔離され、RuntimeをCPU 750ms、heap 16MiB、stack 512KiBに制限するが、QuickJS-Emscriptenは1.0未満かつ本プロジェクトの脅威モデルでは未監査
-- 自作式は64KiB、入力・返却JSONは各1MiB、親watchdogは1秒までで、関数、循環参照、`undefined` などJSON化できない値を入出力できない
+- 自作式は64KiB、入力・返却JSONは各1MiB、同期guest実行は1区間あたりCPU 750ms、初期化や待機を含む評価全体は親watchdogの1秒までで、関数、循環参照、`undefined` などJSON化できない値を入出力できない
 - 自作式では汎用タイマーを公開せず、0〜1,000msの `sleep(ms)` だけを利用できる
 - 生成TypeScriptの自作式はホストJavaScriptで動作し、QuickJSの隔離とJSON入出力正規化を持たない。`sleep(ms)` の範囲検証は生成されるが、ホストオブジェクト、特殊な数値、参照同一性はアプリ内実行と異なり得る
 - `codegen` メタデータのない外部・拡張ノードはTypeScript生成前に拒否される

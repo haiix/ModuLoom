@@ -66,12 +66,43 @@ function unwrapHandle(
   return result.value;
 }
 
-function installInputs(context: QuickJSContext, serializedInputs: string): void {
+type RunGuestOperation = <Result>(operation: () => Result) => Result;
+
+interface EvaluationClock {
+  now(): number;
+}
+
+const monotonicClock: EvaluationClock = {
+  now: () => globalThis.performance.now(),
+};
+
+function installCpuDeadline(runtime: QuickJSRuntime, clock: EvaluationClock): RunGuestOperation {
+  let cpuDeadline: number | undefined;
+  runtime.setInterruptHandler(() => cpuDeadline !== undefined && clock.now() >= cpuDeadline);
+
+  return <Result>(operation: () => Result): Result => {
+    cpuDeadline = clock.now() + CUSTOM_CODE_CPU_TIMEOUT_MS;
+    try {
+      return operation();
+    } finally {
+      cpuDeadline = undefined;
+    }
+  };
+}
+
+function installInputs(
+  context: QuickJSContext,
+  serializedInputs: string,
+  runGuestOperation: RunGuestOperation,
+): void {
   const json = context.getProp(context.global, 'JSON');
   const parse = context.getProp(json, 'parse');
   const source = context.newString(serializedInputs);
   try {
-    const inputs = unwrapHandle(context, context.callFunction(parse, json, source));
+    const inputs = unwrapHandle(
+      context,
+      runGuestOperation(() => context.callFunction(parse, json, source)),
+    );
     try {
       context.setProp(context.global, 'inputs', inputs);
     } finally {
@@ -92,7 +123,7 @@ interface SleepBridge {
 function installSleep(
   context: QuickJSContext,
   runtime: QuickJSRuntime,
-  armCpuDeadline: () => void,
+  runGuestOperation: RunGuestOperation,
 ): SleepBridge {
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const promises = new Set<QuickJSDeferredPromise>();
@@ -115,8 +146,7 @@ function installSleep(
       timers.delete(timer);
       if (!deferred.alive) return;
       deferred.resolve();
-      armCpuDeadline();
-      const pendingResult = runtime.executePendingJobs();
+      const pendingResult = runGuestOperation(() => runtime.executePendingJobs());
       if (pendingResult.error) {
         try {
           rejectFailure(new Error(formatVmError(pendingResult.error.context, pendingResult.error)));
@@ -149,13 +179,12 @@ async function resolveEvaluation(
   context: QuickJSContext,
   runtime: QuickJSRuntime,
   result: QuickJSHandle,
-  armCpuDeadline: () => void,
+  runGuestOperation: RunGuestOperation,
   sleepFailure: Promise<never>,
 ): Promise<string> {
   const promise = context.resolvePromise(result);
-  armCpuDeadline();
   while (runtime.hasPendingJob()) {
-    const pendingResult = runtime.executePendingJobs();
+    const pendingResult = runGuestOperation(() => runtime.executePendingJobs());
     if (pendingResult.error) {
       try {
         throw new Error(formatVmError(pendingResult.error.context, pendingResult.error));
@@ -192,6 +221,7 @@ export async function evaluateCustomCodeWithModule(
   quickJs: Pick<QuickJSWASMModule, 'newRuntime'>,
   code: string,
   inputs: Record<string, unknown>,
+  clock: EvaluationClock = monotonicClock,
 ): Promise<string> {
   const serializedInputs = JSON.stringify(inputs);
   if (serializedInputs === undefined) {
@@ -201,38 +231,34 @@ export async function evaluateCustomCodeWithModule(
   const runtime = quickJs.newRuntime();
   runtime.setMemoryLimit(CUSTOM_CODE_MAX_HEAP_BYTES);
   runtime.setMaxStackSize(CUSTOM_CODE_MAX_STACK_BYTES);
-  let cpuDeadline = 0;
-  const armCpuDeadline = () => {
-    cpuDeadline = Date.now() + CUSTOM_CODE_CPU_TIMEOUT_MS;
-  };
-  armCpuDeadline();
-  runtime.setInterruptHandler(() => Date.now() > cpuDeadline);
+  const runGuestOperation = installCpuDeadline(runtime, clock);
   const context = runtime.newContext();
   let sleepBridge: SleepBridge | undefined;
   let evaluationError: unknown;
   let serializedResult: string | undefined;
   try {
-    sleepBridge = installSleep(context, runtime, armCpuDeadline);
-    installInputs(context, serializedInputs);
-    armCpuDeadline();
+    sleepBridge = installSleep(context, runtime, runGuestOperation);
+    installInputs(context, serializedInputs, runGuestOperation);
     const result = unwrapHandle(
       context,
-      context.evalCode(`
-        Promise.resolve((${code})).then((value) => {
-          const serialized = JSON.stringify(value);
-          if (serialized === undefined) {
-            throw new Error('戻り値はJSONとしてシリアライズ可能である必要があります。');
-          }
-          return serialized;
-        })
-      `),
+      runGuestOperation(() =>
+        context.evalCode(`
+          Promise.resolve((${code})).then((value) => {
+            const serialized = JSON.stringify(value);
+            if (serialized === undefined) {
+              throw new Error('戻り値はJSONとしてシリアライズ可能である必要があります。');
+            }
+            return serialized;
+          })
+        `),
+      ),
     );
     try {
       serializedResult = await resolveEvaluation(
         context,
         runtime,
         result,
-        armCpuDeadline,
+        runGuestOperation,
         sleepBridge.failure,
       );
     } finally {

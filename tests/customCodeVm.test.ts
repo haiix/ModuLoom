@@ -101,6 +101,33 @@ describe('QuickJS custom code VM', () => {
     ).rejects.toThrow(/CPU実行時間が750msを超えたため停止/);
   });
 
+  it('starts a fresh CPU deadline after expensive VM setup', async () => {
+    const module = await newQuickJSWASMModuleFromVariant(debugSyncVariant);
+    const newRuntime = module.newRuntime.bind(module);
+    let currentTime = 0;
+    const moduleWithExpensiveSetup = {
+      newRuntime(...args: Parameters<typeof module.newRuntime>) {
+        const runtime = newRuntime(...args);
+        const newContext = runtime.newContext.bind(runtime);
+        runtime.newContext = (...contextArgs: Parameters<typeof runtime.newContext>) => {
+          const context = newContext(...contextArgs);
+          currentTime += 10_000;
+          return context;
+        };
+        return runtime;
+      },
+    };
+
+    await expect(
+      evaluateCustomCodeWithModule(
+        moduleWithExpensiveSetup,
+        'inputs.value + 1',
+        { value: 41 },
+        { now: () => currentTime },
+      ),
+    ).resolves.toBe('42');
+  });
+
   it.each([
     [
       'deep recursion',
