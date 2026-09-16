@@ -11,7 +11,8 @@ import {
   getTopologicalOrder,
   resolveNodeInputs,
 } from './dagEngine';
-import { isAsyncIterable, isPromise } from './streamEngine';
+import { collectStream, isAsyncIterable, isPromise } from './streamEngine';
+import { isEvaluationCancelled, raceWithEvaluationCancellation } from './evaluationCancellation';
 
 export type DebuggerStatus = 'paused' | 'running' | 'waiting' | 'completed' | 'cancelled';
 
@@ -45,8 +46,7 @@ export class DagExecutionDebugger {
   private index = 0;
   private status: DebuggerStatus = 'paused';
   private lastNodeId?: string;
-  private activeAbortController?: AbortController;
-  private activeStream?: AsyncIterable<unknown> & { cancel?: () => void };
+  private readonly abortController = new AbortController();
   private cancelled = false;
 
   constructor(
@@ -141,8 +141,7 @@ export class DagExecutionDebugger {
   cancel(listener?: SnapshotListener): ExecutionDebuggerSnapshot {
     this.cancelled = true;
     this.status = 'cancelled';
-    this.activeAbortController?.abort();
-    this.activeStream?.cancel?.();
+    this.abortController.abort();
     return this.emit(listener);
   }
 
@@ -194,8 +193,7 @@ export class DagExecutionDebugger {
     }
 
     const startedAt = performance.now();
-    const controller = new AbortController();
-    this.activeAbortController = controller;
+    const signal = this.abortController.signal;
     try {
       let outputs: Record<string, unknown>;
       if (definition.isComposite && definition.compositeSubgraph) {
@@ -204,49 +202,59 @@ export class DagExecutionDebugger {
           return innerDefinition?.isAsync || innerDefinition?.category === 'Async';
         });
         outputs = hasAsync
-          ? await raceWithAbort(
+          ? await raceWithEvaluationCancellation(
               evaluateCompositeNodeAsync(
                 definition.compositeSubgraph,
                 inputs,
                 this.definitions,
-                () => controller.signal.aborted,
+                signal,
               ),
-              controller.signal,
+              signal,
             )
           : evaluateCompositeNode(definition.compositeSubgraph, inputs, this.definitions);
       } else if (definition.typeId === 'stream/collect' && isAsyncIterable(inputs.stream)) {
         outputs = await this.collectStream(
           inputs.stream as AsyncIterable<unknown> & { cancel?: () => void },
-          controller.signal,
+          signal,
           nodeId,
           inputs,
           listener,
         );
       } else {
-        const value = definition.evaluate(inputs, node.state, { signal: controller.signal });
+        const value = definition.evaluate(inputs, node.state, { signal });
         outputs = isPromise(value)
-          ? await raceWithAbort(
+          ? await raceWithEvaluationCancellation(
               Promise.resolve(value as Promise<Record<string, unknown>>),
-              controller.signal,
+              signal,
             )
           : (value as Record<string, unknown>);
       }
       this.record(nodeId, inputs, outputs ?? {}, undefined, performance.now() - startedAt, false);
     } catch (error) {
+      if (this.cancelled || isEvaluationCancelled(error)) {
+        this.record(
+          nodeId,
+          inputs,
+          {},
+          undefined,
+          performance.now() - startedAt,
+          false,
+          [],
+          'cancelled',
+        );
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.record(
         nodeId,
         inputs,
         {},
-        this.cancelled ? 'デバッグ実行がキャンセルされました。' : message,
+        message,
         performance.now() - startedAt,
         false,
         [nodeId],
-        this.cancelled ? 'cancelled' : 'error',
+        'error',
       );
-    } finally {
-      this.activeAbortController = undefined;
-      this.activeStream = undefined;
     }
   }
 
@@ -271,20 +279,16 @@ export class DagExecutionDebugger {
     inputs: Record<string, unknown>,
     listener?: SnapshotListener,
   ) {
-    this.activeStream = stream;
-    const iterator = stream[Symbol.asyncIterator]();
-    const values: unknown[] = [];
-    try {
-      while (values.length < 50) {
-        const item = await raceWithAbort(iterator.next(), signal);
-        if (item.done) break;
-        values.push(item.value);
+    const values = await collectStream(
+      stream,
+      (item, currentValues) => {
+        if (signal.aborted) return;
         const progress: DebugNodeTrace = {
           inputs,
-          outputs: { array: [...values], count: values.length },
+          outputs: { array: currentValues, count: currentValues.length },
           isStreaming: true,
-          streamCount: values.length,
-          latestStreamValue: item.value,
+          streamCount: currentValues.length,
+          latestStreamValue: item,
           isCached: false,
           status: 'waiting',
           changed: false,
@@ -293,13 +297,10 @@ export class DagExecutionDebugger {
         this.traces[nodeId] = progress;
         this.evaluation[nodeId] = progress;
         this.emit(listener);
-      }
-    } finally {
-      if (signal.aborted) {
-        stream.cancel?.();
-        void Promise.resolve(iterator.return?.()).catch(() => undefined);
-      }
-    }
+      },
+      50,
+      signal,
+    );
     return { array: values, count: values.length };
   }
 
@@ -349,22 +350,4 @@ function stableSerialize(value: unknown) {
   } catch {
     return String(value);
   }
-}
-
-function raceWithAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(new Error('デバッグ実行がキャンセルされました。'));
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(new Error('デバッグ実行がキャンセルされました。'));
-    signal.addEventListener('abort', abort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener('abort', abort);
-        resolve(value);
-      },
-      (error) => {
-        signal.removeEventListener('abort', abort);
-        reject(error);
-      },
-    );
-  });
 }

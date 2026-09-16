@@ -116,6 +116,8 @@
 | `composite/input-port`  | Group Input            | `in`       | —                           | 通常グラフでは `testValue` を試験値として使える     |
 | `composite/output-port` | Group Output           | `in`       | —                           | 内部値を複合ノードの出力へ渡す                      |
 
+Async／Streamノードは `EvaluationContext.signal` を共通のキャンセル契約として利用します。Signal中断後は待機中のタイマー、Promise待機、Stream処理を停止し、進捗や結果を通知しません。Streamの停止では `cancel` とIteratorの `return` をそれぞれ最大一度だけ実行し、キャンセルを通常のノードエラーへ変換しません。
+
 ## カスタム型由来ノード
 
 `type/<TypeId>/constructor`、`deconstruct`、`validate` を生成します。Validateは入力がプレーン

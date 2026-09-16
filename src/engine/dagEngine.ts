@@ -10,6 +10,11 @@ import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
 import { CUSTOM_CODE_MAX_SLEEP_MS } from './customCodePolicy';
 import { GENERATED_STREAM_HELPERS } from '../nodes/codegen';
 import { isValueCompatibleWithType } from './typeSystem';
+import {
+  isEvaluationCancelled,
+  raceWithEvaluationCancellation,
+  throwIfEvaluationCancelled,
+} from './evaluationCancellation';
 
 /**
  * Checks if adding a connection from fromNodeId to toNodeId would create a cycle.
@@ -281,7 +286,7 @@ export async function evaluateCompositeNodeAsync(
   subgraph: CompositeSubgraph,
   externalInputs: Record<string, any>,
   definitions: Map<string, NodeDefinition>,
-  isCancelled?: () => boolean,
+  signal?: AbortSignal,
 ): Promise<Record<string, any>> {
   const internalNodes: NodeInstance[] = JSON.parse(JSON.stringify(subgraph.nodes));
   const internalConnections: Connection[] = JSON.parse(JSON.stringify(subgraph.connections));
@@ -312,8 +317,9 @@ export async function evaluateCompositeNodeAsync(
     undefined,
     undefined,
     undefined,
-    isCancelled,
+    signal,
   );
+  throwIfEvaluationCancelled(signal);
 
   const outputs: Record<string, any> = {};
   const externalOutputPortByNodeId = new Map(
@@ -661,7 +667,7 @@ export async function evaluateGraphAsync(
   previousEvaluation?: GraphEvaluation,
   dirtyNodeIds?: Set<string>,
   onNodeProgress?: (nodeId: string, partialEvaluation: NodeEvaluationResult) => void,
-  isCancelled?: () => boolean,
+  signal?: AbortSignal,
 ): Promise<GraphEvaluation> {
   const result: GraphEvaluation = {};
   const { order, hasCycle } = getTopologicalOrder(nodes, connections);
@@ -684,7 +690,7 @@ export async function evaluateGraphAsync(
   }
 
   for (const nodeId of order) {
-    if (isCancelled?.()) break;
+    if (signal?.aborted) break;
 
     const node = nodeMap.get(nodeId);
     if (!node) continue;
@@ -712,7 +718,7 @@ export async function evaluateGraphAsync(
         error: `未登録のノード定義: ${node.typeId}`,
         isCached: false,
       };
-      onNodeProgress?.(nodeId, result[nodeId]);
+      if (!signal?.aborted) onNodeProgress?.(nodeId, result[nodeId]);
       continue;
     }
 
@@ -725,18 +731,19 @@ export async function evaluateGraphAsync(
         error: resolved.error,
         isCached: false,
       };
-      onNodeProgress?.(nodeId, result[nodeId]);
+      if (!signal?.aborted) onNodeProgress?.(nodeId, result[nodeId]);
       continue;
     }
 
     // Indicate pending state for async operations
     if (def.isAsync || def.category === 'Async') {
-      onNodeProgress?.(nodeId, {
-        inputs,
-        outputs: {},
-        isPending: true,
-        isCached: false,
-      });
+      if (!signal?.aborted)
+        onNodeProgress?.(nodeId, {
+          inputs,
+          outputs: {},
+          isPending: true,
+          isCached: false,
+        });
     }
 
     const startTime = performance.now();
@@ -753,7 +760,7 @@ export async function evaluateGraphAsync(
             def.compositeSubgraph,
             inputs,
             definitions,
-            isCancelled,
+            signal,
           );
         } else {
           outputs = evaluateCompositeNode(def.compositeSubgraph, inputs, definitions);
@@ -762,17 +769,18 @@ export async function evaluateGraphAsync(
         const stream = inputs.stream;
         if (stream && isAsyncIterable(stream)) {
           outputs = { array: [], count: 0 };
-          onNodeProgress?.(nodeId, {
-            inputs,
-            outputs,
-            isStreaming: true,
-            streamCount: 0,
-            isCached: false,
-          });
+          if (!signal?.aborted)
+            onNodeProgress?.(nodeId, {
+              inputs,
+              outputs,
+              isStreaming: true,
+              streamCount: 0,
+              isCached: false,
+            });
           const collected = await collectStream(
             stream,
             (item, currentArray) => {
-              if (isCancelled?.()) return;
+              if (signal?.aborted) return;
               outputs = { array: currentArray, count: currentArray.length };
               onNodeProgress?.(nodeId, {
                 inputs,
@@ -784,30 +792,22 @@ export async function evaluateGraphAsync(
               });
             },
             50,
+            signal,
           );
           outputs = { array: collected, count: collected.length };
         } else {
           outputs = { array: [], count: 0 };
         }
       } else {
-        const abortController = new AbortController();
-        if (isCancelled?.()) abortController.abort();
-        const cancellationTimer = isCancelled
-          ? globalThis.setInterval(() => {
-              if (isCancelled()) abortController.abort();
-            }, 10)
-          : undefined;
-        try {
-          const evalRes = def.evaluate(inputs, node.state, { signal: abortController.signal });
-          if (isPromise(evalRes)) {
-            outputs = await evalRes;
-          } else {
-            outputs = evalRes;
-          }
-        } finally {
-          if (cancellationTimer !== undefined) globalThis.clearInterval(cancellationTimer);
+        throwIfEvaluationCancelled(signal);
+        const evalRes = def.evaluate(inputs, node.state, { signal });
+        if (isPromise(evalRes)) {
+          outputs = await raceWithEvaluationCancellation(Promise.resolve(evalRes), signal);
+        } else {
+          outputs = evalRes;
         }
       }
+      throwIfEvaluationCancelled(signal);
 
       const durationMs = performance.now() - startTime;
       result[nodeId] = {
@@ -819,8 +819,9 @@ export async function evaluateGraphAsync(
         isCached: false,
         evaluatedAt: Date.now(),
       };
-      onNodeProgress?.(nodeId, result[nodeId]);
+      if (!signal?.aborted) onNodeProgress?.(nodeId, result[nodeId]);
     } catch (err: any) {
+      if (signal?.aborted || isEvaluationCancelled(err)) break;
       result[nodeId] = {
         inputs,
         outputs: {},

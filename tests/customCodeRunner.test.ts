@@ -240,7 +240,7 @@ describe('custom code runner', () => {
   });
 
   it('passes graph cancellation into an executing node', async () => {
-    let cancelled = false;
+    const controller = new AbortController();
     const definition: NodeDefinition = {
       typeId: 'custom/pending',
       label: 'Pending',
@@ -255,7 +255,7 @@ describe('custom code runner', () => {
         ),
     };
     globalThis.setTimeout(() => {
-      cancelled = true;
+      controller.abort();
     }, 0);
     const result = await evaluateGraphAsync(
       [{ id: 'node', typeId: definition.typeId, x: 0, y: 0 }],
@@ -264,8 +264,8 @@ describe('custom code runner', () => {
       undefined,
       undefined,
       undefined,
-      () => cancelled,
+      controller.signal,
     );
-    expect(result.node.error).toBe('cancelled');
+    expect(result.node).toBeUndefined();
   });
 });

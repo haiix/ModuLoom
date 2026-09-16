@@ -1,7 +1,11 @@
-/**
- * Stream & AsyncIterator Utilities for ModuLoom
- * Provides AsyncIterable primitives, stream transformations, and stream consumers.
- */
+import {
+  abortableDelay,
+  isEvaluationCancelled,
+  raceWithEvaluationCancellation,
+  throwIfEvaluationCancelled,
+} from './evaluationCancellation';
+
+/** Stream & AsyncIterator utilities with cooperative cancellation and deterministic cleanup. */
 
 export function isPromise(val: any): boolean {
   return Boolean(val && typeof val.then === 'function');
@@ -14,8 +18,56 @@ export function isAsyncIterable(val: any): boolean {
 export interface StreamInstance<T = any> extends AsyncIterable<T> {
   isStream: true;
   streamName?: string;
-  cancel?: () => void;
+  cancel?: () => void | Promise<void>;
   [Symbol.asyncIterator](): AsyncIterator<T>;
+}
+
+type CancelableAsyncIterable<T> = AsyncIterable<T> & {
+  cancel?: () => void | Promise<void>;
+};
+
+function createStreamCloser<T>(
+  source: CancelableAsyncIterable<T>,
+  iterator: AsyncIterator<T>,
+  signal?: AbortSignal,
+): () => Promise<void> {
+  let closing: Promise<void> | undefined;
+  const abort = () => void close();
+  function close(): Promise<void> {
+    if (!closing) {
+      signal?.removeEventListener('abort', abort);
+      closing = Promise.allSettled([
+        Promise.resolve().then(() => source.cancel?.()),
+        Promise.resolve().then(() => iterator.return?.()),
+      ]).then(() => undefined);
+    }
+    return closing;
+  }
+  if (signal?.aborted) void close();
+  else signal?.addEventListener('abort', abort, { once: true });
+  return close;
+}
+
+function createStreamAbortController(signal?: AbortSignal) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  let finished = false;
+  return {
+    signal: controller.signal,
+    cancel() {
+      if (finished) return;
+      finished = true;
+      signal?.removeEventListener('abort', abort);
+      controller.abort();
+    },
+    finish() {
+      if (finished) return;
+      finished = true;
+      signal?.removeEventListener('abort', abort);
+    },
+  };
 }
 
 /**
@@ -24,28 +76,31 @@ export interface StreamInstance<T = any> extends AsyncIterable<T> {
 export function createIntervalStream(
   intervalMs: number = 500,
   maxLimit: number = 20,
+  signal?: AbortSignal,
 ): StreamInstance<number> {
   let count = 0;
-  let cancelled = false;
+  const cancellation = createStreamAbortController(signal);
 
   return {
     isStream: true,
     streamName: `IntervalStream(${intervalMs}ms, limit=${maxLimit})`,
-    cancel: () => {
-      cancelled = true;
-    },
+    cancel: () => cancellation.cancel(),
     [Symbol.asyncIterator]() {
       return {
         async next(): Promise<IteratorResult<number>> {
-          if (cancelled || count >= maxLimit) {
+          throwIfEvaluationCancelled(cancellation.signal);
+          if (count >= maxLimit) {
+            cancellation.finish();
             return { done: true, value: undefined };
           }
-          await new Promise((r) => setTimeout(r, Math.max(20, intervalMs)));
-          if (cancelled || count >= maxLimit) {
-            return { done: true, value: undefined };
-          }
+          await abortableDelay(Math.max(20, intervalMs), cancellation.signal);
+          throwIfEvaluationCancelled(cancellation.signal);
           const val = count++;
           return { done: false, value: val };
+        },
+        async return() {
+          cancellation.cancel();
+          return { done: true, value: undefined };
         },
       };
     },
@@ -55,30 +110,36 @@ export function createIntervalStream(
 /**
  * Creates an AsyncIterator from an array, emitting each item with delayMs between items.
  */
-export function createArrayStream<T>(items: T[], delayMs: number = 300): StreamInstance<T> {
+export function createArrayStream<T>(
+  items: T[],
+  delayMs: number = 300,
+  signal?: AbortSignal,
+): StreamInstance<T> {
   let index = 0;
-  let cancelled = false;
+  const cancellation = createStreamAbortController(signal);
 
   return {
     isStream: true,
     streamName: `ArrayStream(${items.length} items)`,
-    cancel: () => {
-      cancelled = true;
-    },
+    cancel: () => cancellation.cancel(),
     [Symbol.asyncIterator]() {
       return {
         async next(): Promise<IteratorResult<T>> {
-          if (cancelled || index >= items.length) {
+          throwIfEvaluationCancelled(cancellation.signal);
+          if (index >= items.length) {
+            cancellation.finish();
             return { done: true, value: undefined };
           }
           if (delayMs > 0) {
-            await new Promise((r) => setTimeout(r, delayMs));
+            await abortableDelay(delayMs, cancellation.signal);
           }
-          if (cancelled || index >= items.length) {
-            return { done: true, value: undefined };
-          }
+          throwIfEvaluationCancelled(cancellation.signal);
           const val = items[index++];
           return { done: false, value: val };
+        },
+        async return() {
+          cancellation.cancel();
+          return { done: true, value: undefined };
         },
       };
     },
@@ -89,20 +150,37 @@ export function createArrayStream<T>(items: T[], delayMs: number = 300): StreamI
  * Transforms an async iterable using a mapping function.
  */
 export function mapStream<T, R>(
-  source: AsyncIterable<T>,
+  source: CancelableAsyncIterable<T>,
   transform: (item: T) => R | Promise<R>,
+  signal?: AbortSignal,
 ): StreamInstance<R> {
+  const iterator = source[Symbol.asyncIterator]();
+  const close = createStreamCloser(source, iterator, signal);
   return {
     isStream: true,
     streamName: 'MapStream',
+    cancel: () => close(),
     [Symbol.asyncIterator]() {
-      const iterator = source[Symbol.asyncIterator]();
       return {
         async next(): Promise<IteratorResult<R>> {
-          const res = await iterator.next();
-          if (res.done) return { done: true, value: undefined };
-          const mapped = await transform(res.value);
-          return { done: false, value: mapped };
+          try {
+            throwIfEvaluationCancelled(signal);
+            const res = await raceWithEvaluationCancellation(iterator.next(), signal);
+            if (res.done) return { done: true, value: undefined };
+            const mapped = await raceWithEvaluationCancellation(
+              Promise.resolve(transform(res.value)),
+              signal,
+            );
+            return { done: false, value: mapped };
+          } catch (error) {
+            const cleanup = close();
+            if (!signal?.aborted && !isEvaluationCancelled(error)) await cleanup;
+            throw error;
+          }
+        },
+        async return() {
+          await close();
+          return { done: true, value: undefined };
         },
       };
     },
@@ -113,24 +191,39 @@ export function mapStream<T, R>(
  * Filters an async iterable using a predicate.
  */
 export function filterStream<T>(
-  source: AsyncIterable<T>,
+  source: CancelableAsyncIterable<T>,
   predicate: (item: T) => boolean | Promise<boolean>,
+  signal?: AbortSignal,
 ): StreamInstance<T> {
+  const iterator = source[Symbol.asyncIterator]();
+  const close = createStreamCloser(source, iterator, signal);
   return {
     isStream: true,
     streamName: 'FilterStream',
+    cancel: () => close(),
     [Symbol.asyncIterator]() {
-      const iterator = source[Symbol.asyncIterator]();
       return {
         async next(): Promise<IteratorResult<T>> {
-          while (true) {
-            const res = await iterator.next();
-            if (res.done) return { done: true, value: undefined };
-            const ok = await predicate(res.value);
-            if (ok) {
-              return { done: false, value: res.value };
+          try {
+            while (true) {
+              throwIfEvaluationCancelled(signal);
+              const res = await raceWithEvaluationCancellation(iterator.next(), signal);
+              if (res.done) return { done: true, value: undefined };
+              const ok = await raceWithEvaluationCancellation(
+                Promise.resolve(predicate(res.value)),
+                signal,
+              );
+              if (ok) return { done: false, value: res.value };
             }
+          } catch (error) {
+            const cleanup = close();
+            if (!signal?.aborted && !isEvaluationCancelled(error)) await cleanup;
+            throw error;
           }
+        },
+        async return() {
+          await close();
+          return { done: true, value: undefined };
         },
       };
     },
@@ -140,22 +233,40 @@ export function filterStream<T>(
 /**
  * Limits an async iterable to the first count items.
  */
-export function takeStream<T>(source: AsyncIterable<T>, count: number): StreamInstance<T> {
+export function takeStream<T>(
+  source: CancelableAsyncIterable<T>,
+  count: number,
+  signal?: AbortSignal,
+): StreamInstance<T> {
   let taken = 0;
+  const iterator = source[Symbol.asyncIterator]();
+  const close = createStreamCloser(source, iterator, signal);
   return {
     isStream: true,
     streamName: `TakeStream(${count})`,
+    cancel: () => close(),
     [Symbol.asyncIterator]() {
-      const iterator = source[Symbol.asyncIterator]();
       return {
         async next(): Promise<IteratorResult<T>> {
-          if (taken >= count) {
-            return { done: true, value: undefined };
+          try {
+            throwIfEvaluationCancelled(signal);
+            if (taken >= count) {
+              await close();
+              return { done: true, value: undefined };
+            }
+            const res = await raceWithEvaluationCancellation(iterator.next(), signal);
+            if (res.done) return { done: true, value: undefined };
+            taken++;
+            return res;
+          } catch (error) {
+            const cleanup = close();
+            if (!signal?.aborted && !isEvaluationCancelled(error)) await cleanup;
+            throw error;
           }
-          const res = await iterator.next();
-          if (res.done) return { done: true, value: undefined };
-          taken++;
-          return res;
+        },
+        async return() {
+          await close();
+          return { done: true, value: undefined };
         },
       };
     },
@@ -169,16 +280,28 @@ export async function collectStream<T>(
   source: AsyncIterable<T>,
   onChunk?: (item: T, currentArray: T[]) => void,
   maxItems: number = 100,
+  signal?: AbortSignal,
 ): Promise<T[]> {
   const results: T[] = [];
+  const cancelableSource = source as CancelableAsyncIterable<T>;
+  const iterator = source[Symbol.asyncIterator]();
+  const close = createStreamCloser(cancelableSource, iterator, signal);
+  let cancelled = false;
   try {
-    for await (const item of source) {
-      results.push(item);
-      onChunk?.(item, [...results]);
-      if (results.length >= maxItems) break;
+    while (results.length < maxItems) {
+      throwIfEvaluationCancelled(signal);
+      const item = await raceWithEvaluationCancellation(iterator.next(), signal);
+      if (item.done) break;
+      throwIfEvaluationCancelled(signal);
+      results.push(item.value);
+      onChunk?.(item.value, [...results]);
     }
-  } catch (err) {
-    console.warn('Stream collection error/interrupted:', err);
+  } catch (error) {
+    cancelled = signal?.aborted === true || isEvaluationCancelled(error);
+    throw error;
+  } finally {
+    const cleanup = close();
+    if (!cancelled && !signal?.aborted) await cleanup;
   }
   return results;
 }

@@ -97,7 +97,9 @@ npm run preview
 8. `evaluate` と同じ挙動の `codegen` メタデータを追加する
 9. ノードリファレンスを更新する
 
-非同期ノードは `isAsync: true` を付け、`evaluate` から Promise を返します。ストリームには `AsyncIterable` を返し、既存の `streamEngine` ヘルパーを優先して利用してください。
+非同期ノードは `isAsync: true` を付け、`evaluate` から Promise を返します。`evaluate` の第3引数にある `EvaluationContext.signal` を必ず下位処理へ渡し、タイマーには `abortableDelay`、外部Promise待機には `raceWithEvaluationCancellation` を利用してください。中断は `EvaluationCancelledError` のまま伝播させ、通常のノード失敗へ変換しません。
+
+ストリームには `AsyncIterable` を返し、Signal対応済みの `streamEngine` ヘルパーを優先して利用してください。独自Streamは停止時に保留中の待機を解除し、`cancel` とIteratorの `return` を何度要求されても実際の後始末が一度だけになるよう実装します。中断後はチャンク、進捗、結果を通知してはいけません。
 
 ## ノード状態と差分判定
 
