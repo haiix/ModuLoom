@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  CornerUpLeft,
   PauseCircle,
   Play,
   RotateCcw,
@@ -30,6 +31,8 @@ interface TopologicalVisualizerProps {
   onStop: () => void;
   onCloseSession: () => void;
   onToggleBreakpoint: (nodeId: string) => void;
+  onEnterComposite: (nodeId: string) => void;
+  onNavigateComposite: (path: string[]) => void;
 }
 
 export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
@@ -47,14 +50,19 @@ export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
   onStop,
   onCloseSession,
   onToggleBreakpoint,
+  onEnterComposite,
+  onNavigateComposite,
 }) => {
-  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const activeNodes = debuggerSnapshot?.nodes ?? nodes;
+  const activeOrder = debuggerSnapshot?.order ?? order;
+  const nodeMap = new Map(activeNodes.map((node) => [node.id, node]));
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const activePathKey = debuggerSnapshot?.path?.join('/') ?? '';
 
   useEffect(() => {
     const preferred = debuggerSnapshot?.nextNodeId ?? debuggerSnapshot?.lastNodeId;
-    if (preferred) setSelectedNodeId(preferred);
-  }, [debuggerSnapshot?.lastNodeId, debuggerSnapshot?.nextNodeId]);
+    setSelectedNodeId(preferred ?? null);
+  }, [activePathKey, debuggerSnapshot?.lastNodeId, debuggerSnapshot?.nextNodeId]);
 
   if (hasCycle) {
     return (
@@ -72,6 +80,7 @@ export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
   const selectedTrace = selectedNodeId ? debuggerSnapshot?.traces[selectedNodeId] : undefined;
   const selectedNode = selectedNodeId ? nodeMap.get(selectedNodeId) : undefined;
   const selectedDefinition = selectedNode ? definitions.get(selectedNode.typeId) : undefined;
+  const activeBreakpoints = new Set(debuggerSnapshot?.breakpoints ?? breakpointNodeIds);
 
   return (
     <div className="flex max-h-[48vh] flex-col gap-2 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
@@ -94,7 +103,7 @@ export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
             DAG 実行デバッガー
           </span>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500 dark:bg-slate-800">
-            {statusLabel(status)} · {order.length} ノード
+            {statusLabel(status)} · {activeOrder.length} ノード
           </span>
         </div>
 
@@ -135,15 +144,50 @@ export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
         </div>
       </div>
 
+      {debuggerSnapshot?.breadcrumbs && debuggerSnapshot.breadcrumbs.length > 1 && (
+        <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+          {debuggerSnapshot.breadcrumbs.map((breadcrumb, index) => (
+            <React.Fragment key={breadcrumb.path.join('/') || 'root'}>
+              {index > 0 && <span>›</span>}
+              <button
+                type="button"
+                onClick={() => onNavigateComposite(breadcrumb.path)}
+                className={
+                  index === debuggerSnapshot.breadcrumbs!.length - 1
+                    ? 'font-semibold text-indigo-600 dark:text-indigo-400'
+                    : 'hover:text-indigo-600'
+                }
+                disabled={index === debuggerSnapshot.breadcrumbs!.length - 1}
+              >
+                {breadcrumb.label}
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      {debuggerSnapshot?.compositeBoundary && debuggerSnapshot.compositeBoundary.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 rounded-md bg-purple-50 px-2 py-1 text-[10px] text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
+          <span className="font-semibold">公開ポート対応:</span>
+          {debuggerSnapshot.compositeBoundary.map((mapping) => (
+            <span key={`${mapping.direction}-${mapping.externalPortId}`} className="font-mono">
+              {mapping.direction === 'input' ? '入力' : '出力'} {mapping.externalPortName} ↔{' '}
+              {mapping.internalNodeName}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-1.5 overflow-x-auto py-1 text-xs scrollbar-thin">
-        {order.map((nodeId, index) => {
+        {activeOrder.map((nodeId, index) => {
           const node = nodeMap.get(nodeId);
           const definition = definitions.get(node?.typeId ?? '');
           if (!node || !definition) return null;
           const trace = debuggerSnapshot?.traces[nodeId];
-          const result = trace ?? evaluation[nodeId];
+          const result =
+            trace ?? ((debuggerSnapshot?.path?.length ?? 0) === 0 ? evaluation[nodeId] : undefined);
           const isNext = debuggerSnapshot?.nextNodeId === nodeId;
-          const isBreakpoint = breakpointNodeIds.has(nodeId);
+          const isBreakpoint = activeBreakpoints.has(nodeId);
           const outType = definition.outputs[0]?.type ?? definition.inputs[0]?.type ?? 'any';
 
           return (
@@ -211,7 +255,7 @@ export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                 ) : null}
               </button>
-              {index < order.length - 1 && (
+              {index < activeOrder.length - 1 && (
                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
               )}
             </React.Fragment>
@@ -238,6 +282,15 @@ export const TopologicalVisualizer: React.FC<TopologicalVisualizerProps> = ({
                 <div>{selectedTrace.error}</div>
                 <div className="mt-1 font-mono">伝播: {selectedTrace.errorPath.join(' → ')}</div>
               </div>
+            )}
+            {selectedDefinition.isComposite && (
+              <button
+                type="button"
+                onClick={() => onEnterComposite(selectedNode.id)}
+                className={secondaryButtonClass}
+              >
+                <CornerUpLeft className="h-3.5 w-3.5" /> 内部トレースを表示
+              </button>
             )}
           </div>
         </div>

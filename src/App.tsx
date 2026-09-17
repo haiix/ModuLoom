@@ -37,7 +37,8 @@ import { CreateCompositeModal } from './components/CreateCompositeModal';
 import { PresetGalleryModal } from './components/PresetGalleryModal';
 import { TopologicalVisualizer } from './components/TopologicalVisualizer';
 import { serializeFlowProject, type ParsedRecoverySnapshot } from './engine/projectSerialization';
-import { DagExecutionDebugger, type ExecutionDebuggerSnapshot } from './engine/executionDebugger';
+import type { ExecutionDebuggerSnapshot } from './engine/executionDebugger';
+import { HierarchicalExecutionDebugger } from './engine/hierarchicalExecutionDebugger';
 import { insertPreset, openPresetAsNew } from './engine/presetApplication';
 import {
   alignSelectedNodes,
@@ -199,7 +200,7 @@ function EditorApp({
   }, [isLibraryOpen]);
 
   // Isolated execution debugger state. Normal reactive evaluation remains in `evaluation`.
-  const executionDebuggerRef = useRef<DagExecutionDebugger | null>(null);
+  const executionDebuggerRef = useRef<HierarchicalExecutionDebugger | null>(null);
   const [debugSnapshot, setDebugSnapshot] = useState<ExecutionDebuggerSnapshot | null>(null);
   const [breakpointNodeIds, setBreakpointNodeIds] = useState<Set<string>>(new Set());
 
@@ -250,8 +251,10 @@ function EditorApp({
     getCurrentEvaluation,
   } = useGraphEvaluation(nodes, connections, definitionsMap);
 
-  const displayedEvaluation = debugSnapshot?.evaluation ?? evaluation;
-  const stepActiveNodeId = debugSnapshot?.nextNodeId ?? null;
+  const isRootDebugView = (debugSnapshot?.path?.length ?? 0) === 0;
+  const displayedEvaluation =
+    debugSnapshot && isRootDebugView ? debugSnapshot.evaluation : evaluation;
+  const stepActiveNodeId = isRootDebugView ? (debugSnapshot?.nextNodeId ?? null) : null;
 
   // Graph edits invalidate the frozen debugger snapshot and safely stop pending work.
   useEffect(() => {
@@ -1025,7 +1028,7 @@ function EditorApp({
       evalStats.dirtyCount > 0 && evalStats.dirtyCount < evalStats.totalCount
         ? new Set(evalStats.lastDirtyNodeIds)
         : undefined;
-    const session = new DagExecutionDebugger(nodes, connections, definitionsMap, {
+    const session = new HierarchicalExecutionDebugger(nodes, connections, definitionsMap, {
       previousEvaluation: getCurrentEvaluation(),
       dirtyNodeIds,
       breakpoints: breakpointNodeIds,
@@ -1065,11 +1068,22 @@ function EditorApp({
   const handleToggleBreakpoint = (nodeId: string) => {
     setBreakpointNodeIds((current) => {
       const next = new Set(current);
-      if (next.has(nodeId)) next.delete(nodeId);
-      else next.add(nodeId);
+      const key = executionDebuggerRef.current?.getBreakpointKey(nodeId) ?? nodeId;
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       executionDebuggerRef.current?.setBreakpoints(next);
       return next;
     });
+  };
+
+  const handleEnterDebugComposite = (nodeId: string) => {
+    const session = executionDebuggerRef.current;
+    if (session) setDebugSnapshot(session.enterComposite(nodeId));
+  };
+
+  const handleNavigateDebugComposite = (path: string[]) => {
+    const session = executionDebuggerRef.current;
+    if (session) setDebugSnapshot(session.navigateTo(path));
   };
 
   // Generate TypeScript Code
@@ -1289,6 +1303,8 @@ function EditorApp({
               onStop={handleStopDebug}
               onCloseSession={handleCloseDebugSession}
               onToggleBreakpoint={handleToggleBreakpoint}
+              onEnterComposite={handleEnterDebugComposite}
+              onNavigateComposite={handleNavigateDebugComposite}
             />
           </div>
         )}

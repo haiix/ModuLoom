@@ -30,6 +30,26 @@ export interface ExecutionDebuggerSnapshot {
   nextNodeId?: string;
   lastNodeId?: string;
   breakpoints: string[];
+  /** Active graph hierarchy. Empty for the root graph. */
+  path?: string[];
+  nodes?: NodeInstance[];
+  breadcrumbs?: Array<{ path: string[]; label: string }>;
+  compositeBoundary?: Array<{
+    direction: 'input' | 'output';
+    externalPortId: string;
+    externalPortName: string;
+    internalNodeId: string;
+    internalNodeName: string;
+  }>;
+}
+
+export interface CompositeExecutionContext {
+  nodeId: string;
+  node: NodeInstance;
+  definition: NodeDefinition;
+  inputs: Record<string, unknown>;
+  mode: 'step' | 'continue';
+  signal: AbortSignal;
 }
 
 type SnapshotListener = (snapshot: ExecutionDebuggerSnapshot) => void;
@@ -46,7 +66,11 @@ export class DagExecutionDebugger {
   private index = 0;
   private status: DebuggerStatus = 'paused';
   private lastNodeId?: string;
+  private pausedAtBreakpoint?: string;
   private readonly abortController = new AbortController();
+  private readonly compositeExecutor?: (
+    context: CompositeExecutionContext,
+  ) => Promise<Record<string, unknown>>;
   private cancelled = false;
 
   constructor(
@@ -57,6 +81,8 @@ export class DagExecutionDebugger {
       previousEvaluation?: GraphEvaluation;
       dirtyNodeIds?: Set<string>;
       breakpoints?: Iterable<string>;
+      signal?: AbortSignal;
+      compositeExecutor?: (context: CompositeExecutionContext) => Promise<Record<string, unknown>>;
     } = {},
   ) {
     const topological = getTopologicalOrder(nodes, connections);
@@ -69,6 +95,8 @@ export class DagExecutionDebugger {
     this.previousEvaluation = options.previousEvaluation ?? {};
     this.dirtyNodeIds = options.dirtyNodeIds;
     this.breakpoints = new Set(options.breakpoints);
+    this.compositeExecutor = options.compositeExecutor;
+    options.signal?.addEventListener('abort', () => this.cancel(), { once: true });
     if (this.order.length === 0) this.status = 'completed';
   }
 
@@ -104,8 +132,9 @@ export class DagExecutionDebugger {
     }
 
     this.status = 'running';
+    if (this.pausedAtBreakpoint === nodeId) this.pausedAtBreakpoint = undefined;
     this.emit(listener);
-    await this.executeNode(nodeId, listener);
+    await this.executeNode(nodeId, listener, 'step');
     this.lastNodeId = nodeId;
     this.index += 1;
     if (!this.cancelled) this.status = this.index >= this.order.length ? 'completed' : 'paused';
@@ -121,16 +150,18 @@ export class DagExecutionDebugger {
     ) {
       return this.getSnapshot();
     }
-    const breakpointToSkip = this.order[this.index];
+    const breakpointToSkip = this.pausedAtBreakpoint;
+    this.pausedAtBreakpoint = undefined;
     this.status = 'running';
     this.emit(listener);
     while (this.index < this.order.length && !this.cancelled) {
       const nodeId = this.order[this.index];
       if (this.breakpoints.has(nodeId) && nodeId !== breakpointToSkip) {
+        this.pausedAtBreakpoint = nodeId;
         this.status = 'paused';
         return this.emit(listener);
       }
-      await this.executeNode(nodeId, listener);
+      await this.executeNode(nodeId, listener, 'continue');
       this.lastNodeId = nodeId;
       this.index += 1;
     }
@@ -145,7 +176,11 @@ export class DagExecutionDebugger {
     return this.emit(listener);
   }
 
-  private async executeNode(nodeId: string, listener?: SnapshotListener) {
+  private async executeNode(
+    nodeId: string,
+    listener: SnapshotListener | undefined,
+    mode: 'step' | 'continue',
+  ) {
     const node = this.nodeMap.get(nodeId);
     const definition = node ? this.definitions.get(node.typeId) : undefined;
     if (!node || !definition) {
@@ -197,21 +232,32 @@ export class DagExecutionDebugger {
     try {
       let outputs: Record<string, unknown>;
       if (definition.isComposite && definition.compositeSubgraph) {
-        const hasAsync = definition.compositeSubgraph.nodes.some((innerNode) => {
-          const innerDefinition = this.definitions.get(innerNode.typeId);
-          return innerDefinition?.isAsync || innerDefinition?.category === 'Async';
-        });
-        outputs = hasAsync
-          ? await raceWithEvaluationCancellation(
-              evaluateCompositeNodeAsync(
-                definition.compositeSubgraph,
-                inputs,
-                this.definitions,
+        if (this.compositeExecutor) {
+          outputs = await this.compositeExecutor({
+            nodeId,
+            node,
+            definition,
+            inputs,
+            mode,
+            signal,
+          });
+        } else {
+          const hasAsync = definition.compositeSubgraph.nodes.some((innerNode) => {
+            const innerDefinition = this.definitions.get(innerNode.typeId);
+            return innerDefinition?.isAsync || innerDefinition?.category === 'Async';
+          });
+          outputs = hasAsync
+            ? await raceWithEvaluationCancellation(
+                evaluateCompositeNodeAsync(
+                  definition.compositeSubgraph,
+                  inputs,
+                  this.definitions,
+                  signal,
+                ),
                 signal,
-              ),
-              signal,
-            )
-          : evaluateCompositeNode(definition.compositeSubgraph, inputs, this.definitions);
+              )
+            : evaluateCompositeNode(definition.compositeSubgraph, inputs, this.definitions);
+        }
       } else if (definition.typeId === 'stream/collect' && isAsyncIterable(inputs.stream)) {
         outputs = await this.collectStream(
           inputs.stream as AsyncIterable<unknown> & { cancel?: () => void },
