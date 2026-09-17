@@ -55,6 +55,7 @@ import { useGraphEvaluation } from './hooks/useGraphEvaluation';
 import { useEditorDocument } from './hooks/useEditorDocument';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
 import { analyzeGraph } from './engine/graphDiagnostics';
+import { getCustomTypeDependents } from './engine/typeSystem';
 import { GraphDiagnosticsPanel } from './components/GraphDiagnosticsPanel';
 
 export default function App() {
@@ -528,6 +529,13 @@ function EditorApp({
   };
 
   const handleDeleteCustomType = (typeId: string) => {
+    const dependents = getCustomTypeDependents(typeId, customTypes);
+    if (dependents.length > 0) {
+      window.alert(
+        `この型は ${dependents.map(({ name }) => name).join(', ')} から参照されているため削除できません。`,
+      );
+      return;
+    }
     setCustomTypes((prev) => prev.filter((t) => t.id !== typeId));
   };
 

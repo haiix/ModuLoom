@@ -240,6 +240,142 @@ class EvaluatingWorker {
 }
 
 describe('project schema validation', () => {
+  it.each(['1.0.0', '1.1.0'])('%sの旧来型文字列を情報欠落なく読み込む', (version) => {
+    const loaded = parseFlowProject(
+      createProject({
+        version,
+        customTypes: [
+          {
+            id: 'Legacy',
+            name: 'Legacy',
+            color: '#000000',
+            fields: [{ name: 'items', type: 'array' }],
+          },
+        ],
+      }),
+    );
+
+    expect(loaded.version).toBe(CURRENT_PROJECT_VERSION);
+    expect(loaded.customTypes?.[0].fields[0].type).toBe('array');
+  });
+
+  it('ネストしたジェネリックとカスタム型参照を読み込む', () => {
+    const loaded = parseFlowProject(
+      createProject({
+        customTypes: [
+          { id: 'User', name: 'User', color: '#000000', fields: [] },
+          {
+            id: 'Envelope',
+            name: 'Envelope',
+            color: '#111111',
+            fields: [{ name: 'users', type: 'promise<array<User>>' }],
+          },
+        ],
+      }),
+    );
+
+    expect(loaded.customTypes?.[1].fields[0].type).toBe('promise<array<User>>');
+  });
+
+  it('複合ノード境界でジェネリック型を保持する', () => {
+    const loaded = parseFlowProject(
+      createProject({
+        customDefinitions: [
+          {
+            typeId: 'composite/number-array',
+            label: 'Number Array',
+            category: 'Composite',
+            kind: 'pure',
+            inputs: [{ id: 'items', name: 'items', type: 'array<number>' }],
+            outputs: [{ id: 'result', name: 'result', type: 'array<number>' }],
+            isComposite: true,
+            compositeSubgraph: {
+              nodes: [
+                {
+                  id: 'input',
+                  typeId: 'composite/input-port',
+                  x: 0,
+                  y: 0,
+                  state: { portName: 'items', portType: 'array<number>', testValue: [] },
+                },
+                {
+                  id: 'output',
+                  typeId: 'composite/output-port',
+                  x: 200,
+                  y: 0,
+                  state: { portName: 'result', portType: 'array<number>' },
+                },
+              ],
+              connections: [
+                {
+                  id: 'passthrough',
+                  fromNodeId: 'input',
+                  fromPortId: 'out',
+                  toNodeId: 'output',
+                  toPortId: 'in',
+                },
+              ],
+              inputNodeIds: ['input'],
+              outputNodeIds: ['output'],
+              inputPortMappings: [{ externalPortId: 'items', internalNodeId: 'input' }],
+              outputPortMappings: [{ externalPortId: 'result', internalNodeId: 'output' }],
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(loaded.customDefinitions?.[0].inputs[0].type).toBe('array<number>');
+    expect(loaded.customDefinitions?.[0].compositeSubgraph?.nodes[0].state.portType).toBe(
+      'array<number>',
+    );
+  });
+
+  it('未知型、不正なarity、カスタム型循環を拒否する', () => {
+    expect(() =>
+      parseFlowProject(
+        createProject({
+          customTypes: [
+            {
+              id: 'Broken',
+              name: 'Broken',
+              color: '#000000',
+              fields: [{ name: 'value', type: 'array<number, string>' }],
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(/不正な型表現/);
+    expect(() =>
+      parseFlowProject(
+        createProject({
+          customTypes: [
+            {
+              id: 'Broken',
+              name: 'Broken',
+              color: '#000000',
+              fields: [{ name: 'value', type: 'Missing' }],
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(/未登録または不正なデータ型/);
+    expect(() =>
+      parseFlowProject(
+        createProject({
+          customTypes: [
+            {
+              id: 'Loop',
+              name: 'Loop',
+              color: '#000000',
+              fields: [{ name: 'children', type: 'array<Loop>' }],
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(/循環参照.*Loop -> Loop/);
+  });
+
   it('未対応バージョンを明確なメッセージで拒否する', () => {
     expect(() => parseFlowProject(createProject({ version: '2.0.0' }))).toThrowError(
       /project\.version: 未対応のバージョン '2\.0\.0'.*1\.1\.0/,

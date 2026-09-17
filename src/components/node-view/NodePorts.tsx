@@ -86,7 +86,7 @@ export function NodePorts({
                     <div
                       role="button"
                       tabIndex={0}
-                      aria-label={`${port.name}入力ポート (${port.type})。候補を表示`}
+                      aria-label={`${port.name}入力ポート (${style.label})。候補を表示`}
                       data-port-node-id={node.id}
                       data-port-id={port.id}
                       data-port-direction="in"
@@ -112,7 +112,7 @@ export function NodePorts({
                         borderColor: portColor,
                         backgroundColor: isConnected ? portColor : undefined,
                       }}
-                      title={`ドラッグして接続・付け替え: ${port.name} (${port.type})`}
+                      title={`ドラッグして接続・付け替え: ${port.name} (${style.label})`}
                     />
 
                     <div className="flex flex-col min-w-0">
@@ -127,7 +127,7 @@ export function NodePorts({
                             color: style.color,
                           }}
                         >
-                          {port.type}
+                          {style.label}
                         </span>
                       </div>
 
@@ -166,7 +166,7 @@ export function NodePorts({
                             color: style.color,
                           }}
                         >
-                          {port.type}
+                          {style.label}
                         </span>
                         <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
                           {port.name}
@@ -185,7 +185,7 @@ export function NodePorts({
                     <div
                       role="button"
                       tabIndex={0}
-                      aria-label={`${port.name}出力ポート (${port.type})。候補を表示`}
+                      aria-label={`${port.name}出力ポート (${style.label})。候補を表示`}
                       data-port-node-id={node.id}
                       data-port-id={port.id}
                       data-port-direction="out"
@@ -205,7 +205,7 @@ export function NodePorts({
                         borderColor: portColor,
                         backgroundColor: isConnected ? portColor : undefined,
                       }}
-                      title={`ドラッグして接続: ${port.name} (${port.type})`}
+                      title={`ドラッグして接続: ${port.name} (${style.label})`}
                     />
                   </div>
                 );

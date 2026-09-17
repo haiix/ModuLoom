@@ -63,4 +63,26 @@ describe('node library model', () => {
     expect(candidates.some((definition) => definition.typeId === 'input/text')).toBe(true);
     expect(candidates.some((definition) => definition.typeId === 'math/add')).toBe(false);
   });
+
+  it('型引数まで一致する候補をany互換候補より先に並べる', () => {
+    const exact = {
+      ...legacyProjectNode,
+      typeId: 'custom/exact-array',
+      label: 'Z exact',
+      inputs: [{ id: 'items', name: 'items', type: 'array<number>' }],
+    } satisfies NodeDefinition;
+    const wildcard = {
+      ...legacyProjectNode,
+      typeId: 'custom/wildcard-array',
+      label: 'A wildcard',
+      inputs: [{ id: 'items', name: 'items', type: 'array<any>' }],
+    } satisfies NodeDefinition;
+    const candidates = getCompatibleDefinitions([wildcard, exact], {
+      direction: 'output',
+      type: 'array<number>',
+      name: 'items',
+    });
+
+    expect(candidates.map(({ typeId }) => typeId)).toEqual([exact.typeId, wildcard.typeId]);
+  });
 });

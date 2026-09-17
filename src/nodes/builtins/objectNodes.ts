@@ -46,7 +46,7 @@ export const OBJECT_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: 'オブジェクト自身の列挙可能なキーを配列で取得',
     inputs: [{ id: 'obj', name: 'obj', type: 'object' }],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<string>' }],
     evaluate: (inputs) => ({ result: Object.keys(inputs.obj) }),
   },
   {

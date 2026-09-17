@@ -11,7 +11,7 @@ export const ARRAY_NODES: NodeDefinition[] = [
       { id: 'item1', name: 'item1', type: 'any' },
       { id: 'item2', name: 'item2', type: 'any' },
     ],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<any>' }],
     evaluate: (inputs) => {
       return { result: [inputs.item1, inputs.item2] };
     },
@@ -22,7 +22,7 @@ export const ARRAY_NODES: NodeDefinition[] = [
     category: 'Array',
     kind: 'pure',
     description: '配列の要素数を取得',
-    inputs: [{ id: 'arr', name: 'arr', type: 'array', defaultValue: [] }],
+    inputs: [{ id: 'arr', name: 'arr', type: 'array<any>', defaultValue: [] }],
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
       return { result: Array.isArray(inputs.arr) ? inputs.arr.length : 0 };
@@ -35,7 +35,7 @@ export const ARRAY_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '配列からインデックス位置の要素を取得。負数は末尾から数える',
     inputs: [
-      { id: 'arr', name: 'arr', type: 'array' },
+      { id: 'arr', name: 'arr', type: 'array<any>' },
       { id: 'index', name: 'index', type: 'number', constraints: { integer: true } },
     ],
     outputs: [{ id: 'result', name: 'result', type: 'any' }],
@@ -54,7 +54,7 @@ export const ARRAY_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '配列を指定の文字で連結して文字列化',
     inputs: [
-      { id: 'arr', name: 'arr', type: 'array', defaultValue: [] },
+      { id: 'arr', name: 'arr', type: 'array<any>', defaultValue: [] },
       { id: 'separator', name: 'separator', type: 'string', defaultValue: ', ' },
     ],
     outputs: [{ id: 'result', name: 'result', type: 'string' }],
@@ -70,10 +70,10 @@ export const ARRAY_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '配列の各数値要素に対して演算（*, +, -, /）と係数を適用して新しい配列を生成',
     inputs: [
-      { id: 'arr', name: 'arr', type: 'array', defaultValue: [] },
+      { id: 'arr', name: 'arr', type: 'array<number>', defaultValue: [] },
       { id: 'factor', name: 'factor (係数)', type: 'number', defaultValue: 2 },
     ],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<number>' }],
     defaultState: { operator: '*' },
     evaluate: (inputs, state) => {
       const arr = Array.isArray(inputs.arr) ? inputs.arr : [];
@@ -105,10 +105,10 @@ export const ARRAY_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '比較条件（>, >=, <, <=, ==, !=）と閾値に基づいて配列の数値をフィルタリング',
     inputs: [
-      { id: 'arr', name: 'arr', type: 'array', defaultValue: [] },
+      { id: 'arr', name: 'arr', type: 'array<number>', defaultValue: [] },
       { id: 'threshold', name: 'threshold (閾値)', type: 'number', defaultValue: 0 },
     ],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<number>' }],
     defaultState: { operator: '>' },
     evaluate: (inputs, state) => {
       const arr = Array.isArray(inputs.arr) ? inputs.arr : [];
@@ -145,11 +145,11 @@ export const ARRAY_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '配列の開始・終了インデックスを指定して部分配列を抽出',
     inputs: [
-      { id: 'arr', name: 'arr', type: 'array', defaultValue: [] },
+      { id: 'arr', name: 'arr', type: 'array<any>', defaultValue: [] },
       { id: 'start', name: 'start', type: 'number', defaultValue: 0 },
       { id: 'end', name: 'end', type: 'number', defaultValue: 5 },
     ],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<any>' }],
     evaluate: (inputs) => {
       const arr = Array.isArray(inputs.arr) ? inputs.arr : [];
       const start = Number(inputs.start ?? 0);
@@ -163,8 +163,8 @@ export const ARRAY_NODES: NodeDefinition[] = [
     category: 'Array',
     kind: 'pure',
     description: '配列の並び順を反転した新しい配列を返す',
-    inputs: [{ id: 'arr', name: 'arr', type: 'array', defaultValue: [] }],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    inputs: [{ id: 'arr', name: 'arr', type: 'array<any>', defaultValue: [] }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<any>' }],
     evaluate: (inputs) => {
       const arr = Array.isArray(inputs.arr) ? [...inputs.arr] : [];
       return { result: arr.reverse() };
@@ -176,7 +176,7 @@ export const ARRAY_NODES: NodeDefinition[] = [
     category: 'Array',
     kind: 'pure',
     description: '数値配列の合計値を算出',
-    inputs: [{ id: 'arr', name: 'arr', type: 'array', defaultValue: [] }],
+    inputs: [{ id: 'arr', name: 'arr', type: 'array<number>', defaultValue: [] }],
     outputs: [{ id: 'result', name: 'result', type: 'number' }],
     evaluate: (inputs) => {
       const arr = Array.isArray(inputs.arr) ? inputs.arr : [];

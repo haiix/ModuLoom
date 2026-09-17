@@ -1,10 +1,13 @@
+import { formatTypeRef, getTypeRefBaseName } from './typeRef';
+
 export type BuiltinDataType =
-  'number' | 'string' | 'boolean' | 'array' | 'object' | 'promise' | 'stream' | 'any';
+  'number' | 'string' | 'boolean' | 'array' | 'object' | 'promise' | 'stream' | 'any' | 'unknown';
 export type DataType = BuiltinDataType | string; // Built-in or custom type like 'User', 'Point2D'
+export type { TypeRef } from './typeRef';
 
 export interface CustomTypeField {
   name: string;
-  type: BuiltinDataType;
+  type: DataType;
   required?: boolean;
   defaultValue?: any;
 }
@@ -262,17 +265,29 @@ const BASE_TYPE_CONFIG: Record<BuiltinDataType, TypeStyle> = {
     textColor: 'text-slate-600 dark:text-slate-300',
     pillBg: 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
   },
+  unknown: {
+    label: 'unknown',
+    color: '#64748b',
+    bgColor: 'rgba(100, 116, 139, 0.15)',
+    borderColor: '#64748b',
+    textColor: 'text-slate-600 dark:text-slate-300',
+    pillBg: 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+  },
 };
 
 export function getTypeStyle(type: DataType, customTypes?: CustomTypeDefinition[]): TypeStyle {
-  if (type in BASE_TYPE_CONFIG) {
-    return BASE_TYPE_CONFIG[type as BuiltinDataType];
+  const baseType = getTypeRefBaseName(type);
+  if (baseType in BASE_TYPE_CONFIG) {
+    return {
+      ...BASE_TYPE_CONFIG[baseType as BuiltinDataType],
+      label: formatTypeRef(type),
+    };
   }
 
-  const custom = customTypes?.find((ct) => ct.id === type || ct.name === type);
+  const custom = customTypes?.find((ct) => ct.id === baseType || ct.name === baseType);
   if (custom) {
     return {
-      label: custom.name,
+      label: formatTypeRef(type),
       color: custom.color,
       bgColor: `${custom.color}26`,
       borderColor: custom.color,
@@ -282,7 +297,7 @@ export function getTypeStyle(type: DataType, customTypes?: CustomTypeDefinition[
   }
 
   return {
-    label: type || 'unknown',
+    label: formatTypeRef(type || 'unknown'),
     color: '#ec4899', // pink-500 fallback for custom types
     bgColor: 'rgba(236, 72, 153, 0.15)',
     borderColor: '#ec4899',

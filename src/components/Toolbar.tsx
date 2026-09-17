@@ -80,10 +80,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     'string',
     'boolean',
     'array',
+    'array<number>',
     'object',
     'promise',
     'stream',
     'any',
+    'unknown',
   ];
   useEffect(() => {
     const update = () => setWidth(window.innerWidth);
@@ -271,7 +273,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                         className="h-2.5 w-2.5 rounded-full"
                         style={{ backgroundColor: getTypeStyle(type, customTypes).color }}
                       />
-                      {type}
+                      {getTypeStyle(type, customTypes).label}
                     </span>
                   </div>
                 ))}

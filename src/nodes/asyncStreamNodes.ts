@@ -32,7 +32,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     ],
     outputs: [
       { id: 'result', name: 'result', type: 'any' },
-      { id: 'promise', name: 'promise', type: 'promise' },
+      { id: 'promise', name: 'promise', type: 'promise<any>' },
     ],
     evaluate: async (inputs, _state, context) => {
       const delay = Math.max(0, Number(inputs.delayMs ?? 600));
@@ -50,7 +50,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '値を即座に解決されるPromiseオブジェクトにラップ',
     inputs: [{ id: 'value', name: 'value', type: 'any', defaultValue: 100 }],
-    outputs: [{ id: 'promise', name: 'promise', type: 'promise' }],
+    outputs: [{ id: 'promise', name: 'promise', type: 'promise<any>' }],
     evaluate: (inputs, _state, context) => {
       throwIfEvaluationCancelled(context?.signal);
       return {
@@ -65,7 +65,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'pure',
     isAsync: true,
     description: 'Promiseを受け取り、解決されるまで待機して値を取り出し',
-    inputs: [{ id: 'promise', name: 'promise', type: 'promise' }],
+    inputs: [{ id: 'promise', name: 'promise', type: 'promise<any>' }],
     outputs: [{ id: 'result', name: 'result', type: 'any' }],
     evaluate: async (inputs, _state, context) => {
       if (!isPromise(inputs.promise)) throw new Error('INPUT_TYPE: Promise入力が必要です。');
@@ -82,10 +82,10 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     isAsync: true,
     description: '2つのPromiseがすべて解決されるのを待機して配列化',
     inputs: [
-      { id: 'p1', name: 'p1', type: 'promise' },
-      { id: 'p2', name: 'p2', type: 'promise' },
+      { id: 'p1', name: 'p1', type: 'promise<any>' },
+      { id: 'p2', name: 'p2', type: 'promise<any>' },
     ],
-    outputs: [{ id: 'results', name: 'results', type: 'array' }],
+    outputs: [{ id: 'results', name: 'results', type: 'array<any>' }],
     evaluate: async (inputs, _state, context) => {
       if (!isPromise(inputs.p1) || !isPromise(inputs.p2)) {
         throw new Error('INPUT_TYPE: Promise入力が必要です。');
@@ -110,7 +110,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     outputs: [
       { id: 'data', name: 'data', type: 'object' },
       { id: 'status', name: 'status', type: 'number' },
-      { id: 'promise', name: 'promise', type: 'promise' },
+      { id: 'promise', name: 'promise', type: 'promise<object>' },
     ],
     evaluate: async (inputs, _state, context) => {
       const ms = inputs.latency;
@@ -145,7 +145,7 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
       { id: 'intervalMs', name: 'intervalMs', type: 'number', defaultValue: 400 },
       { id: 'limit', name: 'limit', type: 'number', defaultValue: 8 },
     ],
-    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream<number>' }],
     evaluate: (inputs, _state, context) => {
       const ms = Math.max(20, Number(inputs.intervalMs ?? 400));
       const limit = Math.max(1, Number(inputs.limit ?? 8));
@@ -161,10 +161,10 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '配列の要素を一定間隔で1つずつストリーム送出',
     inputs: [
-      { id: 'items', name: 'items', type: 'array', defaultValue: [10, 20, 30, 40, 50] },
+      { id: 'items', name: 'items', type: 'array<any>', defaultValue: [10, 20, 30, 40, 50] },
       { id: 'delayMs', name: 'delayMs', type: 'number', defaultValue: 300 },
     ],
-    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream<any>' }],
     evaluate: (inputs, _state, context) => {
       const arr = Array.isArray(inputs.items) ? inputs.items : [1, 2, 3, 4, 5];
       const delay = Math.max(0, Number(inputs.delayMs ?? 300));
@@ -180,10 +180,10 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: '流れてくる各数値を係数(multiplier)でスケーリング変換して次へ送出',
     inputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
+      { id: 'stream', name: 'stream', type: 'stream<number>' },
       { id: 'multiplier', name: 'multiplier', type: 'number', defaultValue: 2 },
     ],
-    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream<number>' }],
     evaluate: (inputs, _state, context) => {
       if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
       const mult = inputs.multiplier;
@@ -204,10 +204,10 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     description:
       '条件（偶数、奇数、正数、または閾値判定）に基づいてストリーム要素をフィルタリング送出',
     inputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
+      { id: 'stream', name: 'stream', type: 'stream<number>' },
       { id: 'threshold', name: 'threshold (閾値)', type: 'number', defaultValue: 0 },
     ],
-    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream<number>' }],
     defaultState: { mode: 'even' },
     evaluate: (inputs, state, context) => {
       if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
@@ -242,10 +242,10 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'pure',
     description: 'ストリームの先頭N個の要素のみを流して完了',
     inputs: [
-      { id: 'stream', name: 'stream', type: 'stream' },
+      { id: 'stream', name: 'stream', type: 'stream<any>' },
       { id: 'count', name: 'count', type: 'number', defaultValue: 4 },
     ],
-    outputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
+    outputs: [{ id: 'stream', name: 'stream', type: 'stream<any>' }],
     evaluate: (inputs, _state, context) => {
       if (!isAsyncIterable(inputs.stream)) throw new Error('INPUT_TYPE: Stream入力が必要です。');
       const count = inputs.count;
@@ -261,9 +261,9 @@ export const ASYNC_STREAM_NODES: NodeDefinition[] = [
     kind: 'output',
     isAsync: true,
     description: 'AsyncIteratorを最後まで非同期消費し、配列として集約',
-    inputs: [{ id: 'stream', name: 'stream', type: 'stream' }],
+    inputs: [{ id: 'stream', name: 'stream', type: 'stream<any>' }],
     outputs: [
-      { id: 'array', name: 'array', type: 'array' },
+      { id: 'array', name: 'array', type: 'array<any>' },
       { id: 'count', name: 'count', type: 'number' },
     ],
     evaluate: async (inputs, _state, context) => {

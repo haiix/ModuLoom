@@ -18,6 +18,7 @@ import {
 import { EXAMPLE_CUSTOM_TYPES, generateNodesForCustomType } from '../src/nodes/customTypeNodes';
 import { BUILTIN_NODES, PRESETS } from '../src/nodes/definitions';
 import type { Connection, NodeDefinition, NodeInstance } from '../src/types';
+import { getTypeRefBaseName } from '../src/typeRef';
 
 const builtins = new Map(BUILTIN_NODES.map((definition) => [definition.typeId, definition]));
 
@@ -118,7 +119,7 @@ const stateOverrides: Record<string, unknown> = {
 
 function representativePortValue(port: NodeDefinition['inputs'][number]): unknown {
   if (port.defaultValue !== undefined) return clone(port.defaultValue);
-  switch (port.type) {
+  switch (getTypeRefBaseName(port.type)) {
     case 'number':
       return 1;
     case 'string':
@@ -479,8 +480,12 @@ describe('runtime / TypeScript output parity', () => {
     expectTypechecks(code);
   });
 
-  it('カスタム型Validateは生成コードでもフィールド型の不一致を拒否する', () => {
-    const userType = EXAMPLE_CUSTOM_TYPES.find(({ id }) => id === 'User')!;
+  it('カスタム型Validateは生成コードでもネストしたフィールド型の不一致を拒否する', () => {
+    const baseUserType = EXAMPLE_CUSTOM_TYPES.find(({ id }) => id === 'User')!;
+    const userType = {
+      ...baseUserType,
+      fields: [...baseUserType.fields, { name: 'tags', type: 'array<string>' }],
+    };
     const definitions = new Map(builtins);
     for (const definition of generateNodesForCustomType(userType)) {
       definitions.set(definition.typeId, definition);
@@ -493,9 +498,10 @@ describe('runtime / TypeScript output parity', () => {
         y: 0,
         state: {
           rawJson: JSON.stringify({
-            id: 'not-a-number',
+            id: 1,
             name: 'User',
             email: 'user@example.com',
+            tags: [1],
           }),
         },
       },

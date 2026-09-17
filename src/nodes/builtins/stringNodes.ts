@@ -74,7 +74,7 @@ export const STRING_NODES: NodeDefinition[] = [
       { id: 'text', name: 'text', type: 'string', defaultValue: 'apple,banana,orange' },
       { id: 'separator', name: 'separator', type: 'string', defaultValue: ',' },
     ],
-    outputs: [{ id: 'result', name: 'result', type: 'array' }],
+    outputs: [{ id: 'result', name: 'result', type: 'array<string>' }],
     evaluate: (inputs) => {
       const text = String(inputs.text ?? '');
       const sep = String(inputs.separator ?? ',');

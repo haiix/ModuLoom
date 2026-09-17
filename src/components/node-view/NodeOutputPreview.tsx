@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from 'react';
+import { Fragment, useState, type SyntheticEvent } from 'react';
 import { Check, CheckCircle2, Copy, XCircle } from 'lucide-react';
 
 import { formatValue } from '../../engine/typeSystem';
@@ -75,12 +75,19 @@ export function NodeOutputPreview({
                   <option value="string">string</option>
                   <option value="boolean">boolean</option>
                   <option value="array">array</option>
+                  <option value="array<any>">Array&lt;any&gt;</option>
+                  <option value="array<number>">Array&lt;number&gt;</option>
+                  <option value="array<string>">Array&lt;string&gt;</option>
                   <option value="object">object</option>
+                  <option value="promise<any>">Promise&lt;any&gt;</option>
+                  <option value="stream<any>">Stream&lt;any&gt;</option>
                   <option value="any">any</option>
+                  <option value="unknown">unknown</option>
                   {customTypes.map((ct) => (
-                    <option key={ct.id} value={ct.id}>
-                      {ct.name} (Custom)
-                    </option>
+                    <Fragment key={ct.id}>
+                      <option value={ct.id}>{ct.name} (Custom)</option>
+                      <option value={`array<${ct.id}>`}>Array&lt;{ct.name}&gt;</option>
+                    </Fragment>
                   ))}
                 </select>
               </div>

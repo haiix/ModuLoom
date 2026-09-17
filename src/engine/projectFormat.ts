@@ -12,20 +12,12 @@ import { generateNodesForCustomType } from '../nodes/customTypeNodes';
 import { getTopologicalOrder } from './dagEngine';
 import { createCustomNodeEvaluator, validateCustomCode } from './customCodeRunner';
 import { isTypeCompatible } from './typeSystem';
+import { findCustomTypeCycle } from './typeSystem';
+import { isKnownTypeRef, isWellFormedTypeRef } from '../typeRef';
 
 export const CURRENT_PROJECT_VERSION = '1.1.0' as const;
 
 const DEFAULT_VIEWPORT = { zoom: 1, pan: { x: 60, y: 80 } };
-const BUILTIN_DATA_TYPES = new Set([
-  'number',
-  'string',
-  'boolean',
-  'array',
-  'object',
-  'promise',
-  'stream',
-  'any',
-]);
 const NODE_CATEGORIES = new Set([
   'Math',
   'String',
@@ -117,10 +109,12 @@ function parsePort(value: unknown, path: string): Port {
     if (constraints?.[key] !== undefined)
       expectFiniteNumber(constraints[key], `${path}.constraints.${key}`);
   }
+  const type = expectString(port.type, `${path}.type`);
+  if (!isWellFormedTypeRef(type)) fail(`${path}.type`, `不正な型表現 '${type}' です。`);
   return {
     id: expectString(port.id, `${path}.id`),
     name: expectString(port.name, `${path}.name`),
-    type: expectString(port.type, `${path}.type`),
+    type,
     description: optionalText(port.description, `${path}.description`),
     ...(required !== undefined ? { required } : {}),
     ...(port.defaultValue !== undefined ? { defaultValue: port.defaultValue } : {}),
@@ -176,9 +170,7 @@ function parseCustomType(value: unknown, path: string): CustomTypeDefinition {
     const fieldPath = `${path}.fields[${index}]`;
     const field = expectRecord(fieldValue, fieldPath);
     const type = expectString(field.type, `${fieldPath}.type`);
-    if (!BUILTIN_DATA_TYPES.has(type)) {
-      fail(`${fieldPath}.type`, `未対応の組み込み型 '${type}' です。`);
-    }
+    if (!isWellFormedTypeRef(type)) fail(`${fieldPath}.type`, `不正な型表現 '${type}' です。`);
     if (field.required !== undefined && typeof field.required !== 'boolean') {
       fail(`${fieldPath}.required`, 'boolean である必要があります。');
     }
@@ -467,6 +459,22 @@ export function parseFlowProject(input: unknown): LoadedFlowProject {
     customTypeNames.add(customType.name);
   }
 
+  const knownTypeNames = customTypes.flatMap(({ id, name }) => [id, name]);
+  for (const [typeIndex, customType] of customTypes.entries()) {
+    for (const [fieldIndex, field] of customType.fields.entries()) {
+      if (!isKnownTypeRef(field.type, knownTypeNames)) {
+        fail(
+          `project.customTypes[${typeIndex}].fields[${fieldIndex}].type`,
+          `未登録または不正なデータ型 '${field.type}' です。`,
+        );
+      }
+    }
+  }
+  const customTypeCycle = findCustomTypeCycle(customTypes);
+  if (customTypeCycle) {
+    fail('project.customTypes', `カスタム型の循環参照があります: ${customTypeCycle.join(' -> ')}`);
+  }
+
   const customDefinitions = (
     project.customDefinitions === undefined
       ? []
@@ -484,13 +492,10 @@ export function parseFlowProject(input: unknown): LoadedFlowProject {
     }
     customDefinitionTypeIds.add(definition.typeId);
   }
-  const validDataTypes = new Set([
-    ...BUILTIN_DATA_TYPES,
-    ...customTypes.flatMap(({ id, name }) => [id, name]),
-  ]);
+  const validDataTypeNames = [...customTypes.flatMap(({ id, name }) => [id, name])];
   for (const [definitionIndex, definition] of customDefinitions.entries()) {
     for (const [portIndex, port] of definition.inputs.entries()) {
-      if (!validDataTypes.has(port.type)) {
+      if (!isKnownTypeRef(port.type, validDataTypeNames)) {
         fail(
           `project.customDefinitions[${definitionIndex}].inputs[${portIndex}].type`,
           `未登録のデータ型 '${port.type}' です。`,
@@ -498,7 +503,7 @@ export function parseFlowProject(input: unknown): LoadedFlowProject {
       }
     }
     for (const [portIndex, port] of definition.outputs.entries()) {
-      if (!validDataTypes.has(port.type)) {
+      if (!isKnownTypeRef(port.type, validDataTypeNames)) {
         fail(
           `project.customDefinitions[${definitionIndex}].outputs[${portIndex}].type`,
           `未登録のデータ型 '${port.type}' です。`,

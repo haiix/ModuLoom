@@ -9,7 +9,7 @@ import {
 import { isPromise, isAsyncIterable, collectStream } from './streamEngine';
 import { CUSTOM_CODE_MAX_SLEEP_MS } from './customCodePolicy';
 import { GENERATED_STREAM_HELPERS } from '../nodes/codegen';
-import { isValueCompatibleWithType } from './typeSystem';
+import { isContainerType, isValueCompatibleWithType, mapDataTypeToTypeScript } from './typeSystem';
 import {
   isEvaluationCancelled,
   raceWithEvaluationCancellation,
@@ -939,7 +939,7 @@ export function generateTypeScriptCode(
       definition.category === 'Async' ||
       definition.category === 'Stream' ||
       [...definition.inputs, ...definition.outputs].some(
-        (port) => port.type === 'promise' || port.type === 'stream',
+        (port) => isContainerType(port.type, 'promise') || isContainerType(port.type, 'stream'),
       )
     );
   });
@@ -979,7 +979,7 @@ export function generateTypeScriptCode(
     for (const customType of customTypes) {
       ts += `export interface ${sanitizeTypeName(customType.name)} {\n`;
       for (const field of customType.fields) {
-        ts += `  ${JSON.stringify(field.name)}${field.required ? '' : '?'}: ${mapDataTypeToTs(field.type, customTypes)};\n`;
+        ts += `  ${JSON.stringify(field.name)}${field.required ? '' : '?'}: ${mapDataTypeToTypeScript(field.type, customTypes)};\n`;
       }
       ts += `}\n\n`;
     }
@@ -992,7 +992,7 @@ export function generateTypeScriptCode(
       node.typeId === 'composite/input-port'
         ? String(node.state?.portType ?? 'any')
         : String(definition.outputs[0]?.type ?? 'any');
-    ts += `  ${JSON.stringify(inputNames.get(node.id)!)}?: ${mapDataTypeToTs(outputType, customTypes)};\n`;
+    ts += `  ${JSON.stringify(inputNames.get(node.id)!)}?: ${mapDataTypeToTypeScript(outputType, customTypes)};\n`;
   }
   ts += `}\n\n`;
 
@@ -1080,31 +1080,4 @@ function sanitizeTypeName(name: string): string {
 function serializeValue(value: unknown): string {
   const serialized = JSON.stringify(value);
   return serialized === undefined ? 'undefined' : serialized;
-}
-
-function mapDataTypeToTs(
-  type: string,
-  customTypes?: import('../types').CustomTypeDefinition[],
-): string {
-  const custom = customTypes?.find((ct) => ct.id === type || ct.name === type);
-  if (custom) return sanitizeTypeName(custom.name);
-
-  switch (type) {
-    case 'number':
-      return 'number';
-    case 'string':
-      return 'string';
-    case 'boolean':
-      return 'boolean';
-    case 'array':
-      return 'any[]';
-    case 'object':
-      return 'Record<string, any>';
-    case 'promise':
-      return 'Promise<any>';
-    case 'stream':
-      return 'AsyncIterable<any>';
-    default:
-      return 'any';
-  }
 }

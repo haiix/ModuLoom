@@ -406,8 +406,14 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                           <option value="string">string</option>
                           <option value="boolean">boolean</option>
                           <option value="array">array</option>
+                          <option value="array<any>">Array&lt;any&gt;</option>
+                          <option value="array<number>">Array&lt;number&gt;</option>
+                          <option value="array<string>">Array&lt;string&gt;</option>
                           <option value="object">object</option>
+                          <option value="promise<any>">Promise&lt;any&gt;</option>
+                          <option value="stream<any>">Stream&lt;any&gt;</option>
                           <option value="any">any</option>
+                          <option value="unknown">unknown</option>
                         </optgroup>
                         {customTypes.length > 0 && (
                           <optgroup label="カスタム型">
@@ -478,8 +484,14 @@ export const CustomNodeModal: React.FC<CustomNodeModalProps> = ({
                       <option value="string">string</option>
                       <option value="boolean">boolean</option>
                       <option value="array">array</option>
+                      <option value="array<any>">Array&lt;any&gt;</option>
+                      <option value="array<number>">Array&lt;number&gt;</option>
+                      <option value="array<string>">Array&lt;string&gt;</option>
                       <option value="object">object</option>
+                      <option value="promise<any>">Promise&lt;any&gt;</option>
+                      <option value="stream<any>">Stream&lt;any&gt;</option>
                       <option value="any">any</option>
+                      <option value="unknown">unknown</option>
                     </optgroup>
                     {customTypes.length > 0 && (
                       <optgroup label="カスタム型">

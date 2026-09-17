@@ -9,7 +9,7 @@ const customType: CustomTypeDefinition = {
   fields: [
     { name: 'count', type: 'number', required: true },
     { name: 'title', type: 'string', required: true },
-    { name: 'tags', type: 'array', required: false },
+    { name: 'tags', type: 'array<string>', required: false },
     { name: 'metadata', type: 'object', required: false },
   ],
 };
@@ -39,6 +39,10 @@ describe('custom type nodes', () => {
       isValid: true,
     });
     expect(validator.evaluate({ data: { count: 1, title: 'ok', tags: 'a' } })).toEqual({
+      isValid: false,
+      instance: null,
+    });
+    expect(validator.evaluate({ data: { count: 1, title: 'ok', tags: [1] } })).toEqual({
       isValid: false,
       instance: null,
     });
