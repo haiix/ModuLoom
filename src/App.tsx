@@ -54,6 +54,8 @@ import { useRecoveryAutosave } from './hooks/useRecoveryAutosave';
 import { useGraphEvaluation } from './hooks/useGraphEvaluation';
 import { useEditorDocument } from './hooks/useEditorDocument';
 import { useCanvasViewport } from './hooks/useCanvasViewport';
+import { analyzeGraph } from './engine/graphDiagnostics';
+import { GraphDiagnosticsPanel } from './components/GraphDiagnosticsPanel';
 
 export default function App() {
   const { recovery, discardRecovery, trustRecovery } = useRecoveryBootstrap();
@@ -217,6 +219,19 @@ function EditorApp({
     }
     return map;
   }, [allDefinitions]);
+
+  const trustedCustomCodeTypeIds = useMemo(
+    () =>
+      new Set(customDefinitions.filter(({ customCode }) => customCode).map(({ typeId }) => typeId)),
+    [customDefinitions],
+  );
+  const graphDiagnostics = useMemo(
+    () =>
+      analyzeGraph(nodes, connections, definitionsMap, customTypes, {
+        trustedCustomCodeTypeIds,
+      }),
+    [connections, customTypes, definitionsMap, nodes, trustedCustomCodeTypeIds],
+  );
 
   // Topological ordering
   const { order: topoOrder, hasCycle } = useMemo(() => {
@@ -980,6 +995,21 @@ function EditorApp({
     });
   };
 
+  const handleSelectDiagnosticNode = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      if (!node) return;
+      setSelectedNodeIds(new Set([nodeId]));
+      const bounds = document.querySelector('main')?.getBoundingClientRect();
+      if (!bounds) return;
+      setPan({
+        x: bounds.width / 2 - (node.x + 120) * zoom,
+        y: bounds.height / 2 - (node.y + 80) * zoom,
+      });
+    },
+    [nodes, setPan, zoom],
+  );
+
   // Execution debugger controls
   const handleStartDebug = () => {
     executionDebuggerRef.current?.cancel();
@@ -1159,6 +1189,11 @@ function EditorApp({
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
         onFitView={handleFitView}
+      />
+
+      <GraphDiagnosticsPanel
+        diagnostics={graphDiagnostics}
+        onSelectNode={handleSelectDiagnosticNode}
       />
 
       {/* Main Canvas Workspace */}

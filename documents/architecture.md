@@ -148,6 +148,17 @@ QuickJS移行によりmain JSはrawで436.08kBから556.96kBへ増加し、別ch
 
 初回評価とプロジェクト全置換では全ノードを評価します。
 
+## グラフ診断
+
+`graphDiagnostics.ts` は現在のノード、接続、定義を読み取る純粋関数として、編集時の問題を
+`error`、`warning`、`info` に分類します。必須入力、接続端点、型互換性、`any` 境界、循環、
+出力へ到達しないノード、コード生成メタデータ、決定性、自作コードの信頼状態を検査します。
+型互換性は `isTypeCompatible`、循環は `getTopologicalOrder` を再利用し、実行時の規則との
+重複を避けます。診断は入力配列やノード状態を変更しません。
+
+`GraphDiagnosticsPanel` は診断の表示と対象ノード選択だけを担当します。項目を選ぶと `App` が
+選択状態とviewportを更新しますが、`EditorDocument` とUndo履歴は変更しません。
+
 ## 実行デバッガー
 
 `DagExecutionDebugger` は通常のリアクティブ評価と状態を共有せず、開始時点のグラフ、定義、前回評価を固定したセッションとして動作します。トポロジカル順の次ノードを実行前に公開し、`step` は1ノードだけ、`continue` は次のブレークポイント直前または末尾まで進めます。グラフ編集時はセッションをキャンセルして破棄するため、古い接続に対するデバッグ結果は残りません。
@@ -251,36 +262,38 @@ Worker初期化はいずれも確認前に開始されません。アプリ内�
 
 ## 主要ファイル
 
-| ファイル                             | 責務                                         |
-| ------------------------------------ | -------------------------------------------- |
-| `src/App.tsx`                        | 画面構成と機能間イベントの調停               |
-| `src/hooks/useEditorDocument.ts`     | 編集履歴、Undo／Redo、保存済み状態           |
-| `src/hooks/useGraphEvaluation.ts`    | 差分評価、非同期キャンセル、再評価           |
-| `src/hooks/useRecoveryBootstrap.ts`  | 起動時の復元検証と自作式の信頼確認           |
-| `src/hooks/useRecoveryAutosave.ts`   | 自動保存、タブ間競合、離脱警告               |
-| `src/hooks/useCanvasViewport.ts`     | ズームとパンの状態                           |
-| `src/types.ts`                       | グラフ、型、評価結果、保存形式の型定義       |
-| `src/engine/dagEngine.ts`            | DAG 操作、同期・非同期評価、複合評価、TS生成 |
-| `src/engine/typeSystem.ts`           | 型互換性、値型判定、表示整形                 |
-| `src/engine/streamEngine.ts`         | Promise／AsyncIterator ヘルパー              |
-| `src/engine/editorHistory.ts`        | 編集履歴、Undo／Redo、未保存判定             |
-| `src/engine/graphEditing.ts`         | 複数選択のコピー、移動、削除、整列           |
-| `src/engine/customCodeRunner.ts`     | 自作式のWorkerキュー、時間制限、キャンセル   |
-| `src/engine/customCodePolicy.ts`     | 自作式の時間・サイズ・sleep制限定数          |
-| `src/engine/customCodeWorker.ts`     | Module Worker内のQuickJS評価要求処理         |
-| `src/engine/customCodeVm.ts`         | QuickJS moduleと評価別Runtime/Context管理    |
-| `src/engine/projectTrust.ts`         | 読み込み時の実行コード信頼判定               |
-| `src/engine/executionDebugger.ts`    | 逐次実行、停止、トレース、エラー経路         |
-| `src/nodes/definitions.ts`           | 組み込み定義の集約、メタデータ、プリセット   |
-| `src/nodes/builtins/*.ts`            | カテゴリ別の組み込み評価実装                 |
-| `src/nodes/asyncStreamNodes.ts`      | 非同期・ストリームノード                     |
-| `src/nodes/customTypeNodes.ts`       | カスタム型由来ノードとコード生成定義         |
-| `src/nodes/codegen.ts`               | 組み込みノードのコード生成メタデータ         |
-| `src/components/Canvas.tsx`          | キャンバス操作、接続検証、ワイヤー描画       |
-| `src/components/NodeView.tsx`        | ノード外枠と単一責務部品の構成               |
-| `src/components/node-view/*.tsx`     | ヘッダー、入力、出力、ポートの表示           |
-| `src/components/Toolbar.tsx`         | 常設操作とレスポンシブな補助操作メニュー     |
-| `src/components/CanvasControls.tsx`  | 評価方式、実行、ズームなどのキャンバス操作   |
-| `src/components/toolbarLayout.ts`    | 画面幅に応じたツールバー表示密度             |
-| `src/components/OnboardingGuide.tsx` | 初回ガイドの表示と操作                       |
-| `src/components/onboarding.ts`       | ガイドの進行判定、保存キー、安定プリセット   |
+| ファイル                                   | 責務                                         |
+| ------------------------------------------ | -------------------------------------------- |
+| `src/App.tsx`                              | 画面構成と機能間イベントの調停               |
+| `src/hooks/useEditorDocument.ts`           | 編集履歴、Undo／Redo、保存済み状態           |
+| `src/hooks/useGraphEvaluation.ts`          | 差分評価、非同期キャンセル、再評価           |
+| `src/hooks/useRecoveryBootstrap.ts`        | 起動時の復元検証と自作式の信頼確認           |
+| `src/hooks/useRecoveryAutosave.ts`         | 自動保存、タブ間競合、離脱警告               |
+| `src/hooks/useCanvasViewport.ts`           | ズームとパンの状態                           |
+| `src/types.ts`                             | グラフ、型、評価結果、保存形式の型定義       |
+| `src/engine/dagEngine.ts`                  | DAG 操作、同期・非同期評価、複合評価、TS生成 |
+| `src/engine/typeSystem.ts`                 | 型互換性、値型判定、表示整形                 |
+| `src/engine/streamEngine.ts`               | Promise／AsyncIterator ヘルパー              |
+| `src/engine/editorHistory.ts`              | 編集履歴、Undo／Redo、未保存判定             |
+| `src/engine/graphEditing.ts`               | 複数選択のコピー、移動、削除、整列           |
+| `src/engine/graphDiagnostics.ts`           | 非破壊の編集時グラフ診断                     |
+| `src/engine/customCodeRunner.ts`           | 自作式のWorkerキュー、時間制限、キャンセル   |
+| `src/engine/customCodePolicy.ts`           | 自作式の時間・サイズ・sleep制限定数          |
+| `src/engine/customCodeWorker.ts`           | Module Worker内のQuickJS評価要求処理         |
+| `src/engine/customCodeVm.ts`               | QuickJS moduleと評価別Runtime/Context管理    |
+| `src/engine/projectTrust.ts`               | 読み込み時の実行コード信頼判定               |
+| `src/engine/executionDebugger.ts`          | 逐次実行、停止、トレース、エラー経路         |
+| `src/nodes/definitions.ts`                 | 組み込み定義の集約、メタデータ、プリセット   |
+| `src/nodes/builtins/*.ts`                  | カテゴリ別の組み込み評価実装                 |
+| `src/nodes/asyncStreamNodes.ts`            | 非同期・ストリームノード                     |
+| `src/nodes/customTypeNodes.ts`             | カスタム型由来ノードとコード生成定義         |
+| `src/nodes/codegen.ts`                     | 組み込みノードのコード生成メタデータ         |
+| `src/components/Canvas.tsx`                | キャンバス操作、接続検証、ワイヤー描画       |
+| `src/components/NodeView.tsx`              | ノード外枠と単一責務部品の構成               |
+| `src/components/node-view/*.tsx`           | ヘッダー、入力、出力、ポートの表示           |
+| `src/components/Toolbar.tsx`               | 常設操作とレスポンシブな補助操作メニュー     |
+| `src/components/CanvasControls.tsx`        | 評価方式、実行、ズームなどのキャンバス操作   |
+| `src/components/GraphDiagnosticsPanel.tsx` | 診断件数、一覧、対象ノードへの移動           |
+| `src/components/toolbarLayout.ts`          | 画面幅に応じたツールバー表示密度             |
+| `src/components/OnboardingGuide.tsx`       | 初回ガイドの表示と操作                       |
+| `src/components/onboarding.ts`             | ガイドの進行判定、保存キー、安定プリセット   |
