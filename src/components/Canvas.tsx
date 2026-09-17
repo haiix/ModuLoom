@@ -52,6 +52,17 @@ interface DraggingWireBase {
   currentY: number;
 }
 
+type PointerInteractionStart =
+  | { kind: 'canvas' | 'node' }
+  | {
+      kind: 'wire';
+      nodeId: string;
+      portId: string;
+      isOutput: boolean;
+    };
+
+type PointerInteraction = PointerInteractionStart & { startX: number; startY: number };
+
 type DraggingWire =
   | (DraggingWireBase & {
       origin: 'output';
@@ -97,6 +108,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onSelectPort,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const activePointerIdRef = useRef<number | null>(null);
+  const pointerInteractionRef = useRef<PointerInteraction | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
 
   // Dragging node state
@@ -128,6 +141,38 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Port coordinates cache for wire drawing
   const [portPositions, setPortPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  const capturePointer = (
+    event: React.PointerEvent,
+    interaction: PointerInteractionStart,
+  ): boolean => {
+    if (!event.isPrimary || activePointerIdRef.current !== null) return false;
+    activePointerIdRef.current = event.pointerId;
+    pointerInteractionRef.current = {
+      ...interaction,
+      startX: event.clientX,
+      startY: event.clientY,
+    } as PointerInteraction;
+    try {
+      containerRef.current?.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic test events may not represent an active browser pointer.
+    }
+    return true;
+  };
+
+  const releasePointer = (pointerId: number) => {
+    if (activePointerIdRef.current !== pointerId) return;
+    activePointerIdRef.current = null;
+    pointerInteractionRef.current = null;
+    try {
+      if (containerRef.current?.hasPointerCapture(pointerId)) {
+        containerRef.current.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // The browser can release capture before pointercancel is delivered.
+    }
+  };
 
   // Helper to re-measure port positions from DOM
   const updatePortPositions = useCallback(() => {
@@ -205,8 +250,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     onUpdateZoomPan(newZoom, { x: newPanX, y: newPanY });
   };
 
-  // Canvas Mouse Down: Start selection with the left button or panning with the right button.
-  const handleMouseDown = (e: React.MouseEvent) => {
+  // Mouse/pen primary drag selects. Touch drag and the mouse/pen secondary button pan.
+  const handlePointerDown = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
     // If clicking on node or handle or input controls, do not pan or deselect
     if (
@@ -219,14 +264,19 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     setSelectedConnectionId(null);
 
-    if (e.button === 0 && containerRef.current) {
+    const shouldPan = e.pointerType === 'touch' || e.button === 2;
+    const shouldSelect = e.button === 0 && e.pointerType !== 'touch';
+    if (!shouldPan && !shouldSelect) return;
+    if (!capturePointer(e, { kind: 'canvas' })) return;
+
+    if (shouldSelect && containerRef.current) {
       e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left - pan.x) / zoom;
       const y = (e.clientY - rect.top - pan.y) / zoom;
       if (!e.shiftKey) onSelectionChange(new Set());
       setSelectionBox({ startX: x, startY: y, currentX: x, currentY: y, additive: e.shiftKey });
-    } else if (e.button === 2) {
+    } else if (shouldPan) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
@@ -234,7 +284,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   // Node Dragging Start
-  const handleNodeMouseDown = (e: React.MouseEvent, node: NodeInstance) => {
+  const handleNodePointerDown = (e: React.PointerEvent, node: NodeInstance) => {
+    if (e.button !== 0 || !e.isPrimary) return;
     const target = e.target as HTMLElement;
     // If click originated on an input box, textarea, select, or button, do not start dragging the node
     if (target.closest('input, textarea, select, button, [contenteditable="true"]')) {
@@ -244,6 +295,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     e.stopPropagation();
+    if (!capturePointer(e, { kind: 'node' })) return;
     setSelectedConnectionId(null);
 
     const nextSelection = new Set(selectedNodeIds);
@@ -268,13 +320,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   };
 
-  // Port Mouse Down: Start dragging a connection wire from either side.
-  const handlePortMouseDown = (
-    e: React.MouseEvent,
+  // Pointer down on either side starts a connection wire.
+  const handlePortPointerDown = (
+    e: React.PointerEvent,
     nodeId: string,
     portId: string,
     isOutput: boolean,
   ) => {
+    if (e.button !== 0 || !e.isPrimary) return;
     const node = nodes.find((n) => n.id === nodeId);
     const def = node ? definitions.get(node.typeId) : null;
     const port = isOutput
@@ -283,6 +336,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (!node || !port || !containerRef.current) return;
 
     e.preventDefault();
+    if (!capturePointer(e, { kind: 'wire', nodeId, portId, isOutput })) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const startX = (e.clientX - containerRect.left - pan.x) / zoom;
@@ -322,13 +376,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     setWireHoverHint(null);
   };
 
-  // Port Mouse Up: Complete an output -> input connection regardless of drag direction.
-  const handlePortMouseUp = (
-    _e: React.MouseEvent,
-    toNodeId: string,
-    toPortId: string,
-    isOutput: boolean,
-  ) => {
+  // Complete an output -> input connection regardless of drag direction.
+  const completeWireAtPort = (toNodeId: string, toPortId: string, isOutput: boolean) => {
     if (!draggingWire) return;
     if (
       (draggingWire.origin === 'output' && isOutput) ||
@@ -396,8 +445,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     setWireHoverHint(null);
   };
 
-  // Canvas Mouse Move: Move node, pan canvas, or move wire
-  const handleMouseMove = (e: React.MouseEvent) => {
+  // A captured pointer keeps node, pan, selection, and wire drags coherent outside the canvas.
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (activePointerIdRef.current !== e.pointerId) return;
     // 1. Panning
     if (isPanning) {
       const newPanX = e.clientX - panStart.x;
@@ -502,8 +552,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
-  // Mouse Up: Stop dragging or panning
-  const handleMouseUp = () => {
+  const finishPointerInteraction = (e: React.PointerEvent, cancelled: boolean) => {
+    if (activePointerIdRef.current !== e.pointerId) return;
+    const interaction = pointerInteractionRef.current;
     setIsPanning(false);
     if (draggingNode) onFinishNodeDrag?.();
     setDraggingNode(null);
@@ -550,38 +601,46 @@ export const Canvas: React.FC<CanvasProps> = ({
       onSelectionChange(selected);
       setSelectionBox(null);
     }
-    if (draggingWire) {
-      if (draggingWire.origin === 'input' && draggingWire.existingConnectionId) {
-        onDeleteConnection(draggingWire.existingConnectionId);
+    if (draggingWire && !cancelled) {
+      const pointerTravel = interaction
+        ? Math.hypot(e.clientX - interaction.startX, e.clientY - interaction.startY)
+        : Number.POSITIVE_INFINITY;
+      if (interaction?.kind === 'wire' && pointerTravel < 5) {
+        activatePort(interaction.nodeId, interaction.portId, interaction.isOutput);
+        setDraggingWire(null);
+        setWireHoverHint(null);
+      } else {
+        const hoveredElement = document.elementFromPoint(e.clientX, e.clientY);
+        const portSocket = hoveredElement?.closest<HTMLElement>(
+          '[data-port-id][data-port-direction]',
+        );
+        const nodeId = portSocket?.dataset.portNodeId;
+        const portId = portSocket?.dataset.portId;
+        const direction = portSocket?.dataset.portDirection;
+        if (nodeId && portId && (direction === 'in' || direction === 'out')) {
+          completeWireAtPort(nodeId, portId, direction === 'out');
+        } else {
+          if (draggingWire.origin === 'input' && draggingWire.existingConnectionId) {
+            onDeleteConnection(draggingWire.existingConnectionId);
+          }
+          setDraggingWire(null);
+          setWireHoverHint(null);
+        }
       }
+    } else if (draggingWire) {
       setDraggingWire(null);
       setWireHoverHint(null);
     }
+    releasePointer(e.pointerId);
   };
 
-  useEffect(() => {
-    if (!draggingWire) return;
-    const finishWireOutsideCanvas = (event: MouseEvent) => {
-      if (event.target instanceof Node && containerRef.current?.contains(event.target)) return;
-      if (draggingWire.origin === 'input' && draggingWire.existingConnectionId) {
-        onDeleteConnection(draggingWire.existingConnectionId);
-      }
-      setDraggingWire(null);
-      setWireHoverHint(null);
-    };
-    window.addEventListener('mouseup', finishWireOutsideCanvas);
-    return () => window.removeEventListener('mouseup', finishWireOutsideCanvas);
-  }, [draggingWire, onDeleteConnection]);
+  const handlePointerUp = (event: React.PointerEvent) => {
+    finishPointerInteraction(event, false);
+  };
 
-  useEffect(() => {
-    if (!draggingNode) return;
-    const finishDragOutsideCanvas = () => {
-      onFinishNodeDrag?.();
-      setDraggingNode(null);
-    };
-    window.addEventListener('mouseup', finishDragOutsideCanvas);
-    return () => window.removeEventListener('mouseup', finishDragOutsideCanvas);
-  }, [draggingNode, onFinishNodeDrag]);
+  const handlePointerCancel = (event: React.PointerEvent) => {
+    finishPointerInteraction(event, true);
+  };
 
   // Compute Bezier Curve Path
   const getBezierPath = (x1: number, y1: number, x2: number, y2: number): string => {
@@ -607,17 +666,42 @@ export const Canvas: React.FC<CanvasProps> = ({
     return map;
   }, [nodes, connections]);
 
+  const activatePort = (nodeId: string, portId: string, isOutput: boolean) => {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    const definition = node ? definitions.get(node.typeId) : undefined;
+    const ports = isOutput ? definition?.outputs : definition?.inputs;
+    const port = ports?.find((candidate) => candidate.id === portId);
+    if (!node || !port) return;
+    const type =
+      node.typeId === 'composite/input-port' && isOutput
+        ? node.state?.portType || port.type
+        : node.typeId === 'composite/output-port' && !isOutput
+          ? node.state?.portType || port.type
+          : port.type;
+    onSelectPort?.({
+      direction: isOutput ? 'output' : 'input',
+      type,
+      name:
+        (node.typeId === 'composite/input-port' && isOutput) ||
+        (node.typeId === 'composite/output-port' && !isOutput)
+          ? node.state?.portName || port.name
+          : port.name,
+    });
+  };
+
   return (
     <div
       ref={containerRef}
       onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onContextMenu={(event) => event.preventDefault()}
       aria-label="ノードキャンバス"
       className={`relative h-full w-full select-none overflow-hidden bg-slate-100 dark:bg-slate-950 ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
       style={{
+        touchAction: 'none',
         backgroundImage: `radial-gradient(circle, var(--color-slate-300, #cbd5e1) 1px, transparent 1px)`,
         backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
         backgroundPosition: `${pan.x}px ${pan.y}px`,
@@ -855,7 +939,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               style={{
                 transform: `translate(${node.x}px, ${node.y}px)`,
               }}
-              onMouseDown={(e) => handleNodeMouseDown(e, node)}
+              onPointerDown={(e) => handleNodePointerDown(e, node)}
             >
               <NodeView
                 node={node}
@@ -869,30 +953,10 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onUnpackComposite={() => onUnpackComposite?.(node.id)}
                 onUpdateState={(state) => onUpdateNodeState(node.id, state)}
                 onUpdateLabel={(lbl) => onUpdateNodeLabel(node.id, lbl)}
-                onPortMouseDown={(e, portId, isOut) =>
-                  handlePortMouseDown(e, node.id, portId, isOut)
+                onPortPointerDown={(e, portId, isOut) =>
+                  handlePortPointerDown(e, node.id, portId, isOut)
                 }
-                onPortMouseUp={(e, portId, isOut) => handlePortMouseUp(e, node.id, portId, isOut)}
-                onPortActivate={(portId, isOutput) => {
-                  const ports = isOutput ? def.outputs : def.inputs;
-                  const port = ports.find((candidate) => candidate.id === portId);
-                  if (!port) return;
-                  const type =
-                    node.typeId === 'composite/input-port' && isOutput
-                      ? node.state?.portType || port.type
-                      : node.typeId === 'composite/output-port' && !isOutput
-                        ? node.state?.portType || port.type
-                        : port.type;
-                  onSelectPort?.({
-                    direction: isOutput ? 'output' : 'input',
-                    type,
-                    name:
-                      (node.typeId === 'composite/input-port' && isOutput) ||
-                      (node.typeId === 'composite/output-port' && !isOutput)
-                        ? node.state?.portName || port.name
-                        : port.name,
-                  });
-                }}
+                onPortActivate={(portId, isOutput) => activatePort(node.id, portId, isOutput)}
                 connectedPorts={
                   connectedPortsMap[node.id] || { inputs: new Set(), outputs: new Set() }
                 }

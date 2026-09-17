@@ -18,8 +18,7 @@ interface NodeViewProps {
   onUnpackComposite?: () => void;
   onUpdateState: (newState: any) => void;
   onUpdateLabel: (newLabel: string) => void;
-  onPortMouseDown: (e: React.MouseEvent, portId: string, isOutput: boolean) => void;
-  onPortMouseUp: (e: React.MouseEvent, portId: string, isOutput: boolean) => void;
+  onPortPointerDown: (e: React.PointerEvent, portId: string, isOutput: boolean) => void;
   onPortActivate?: (portId: string, isOutput: boolean) => void;
   connectedPorts: {
     inputs: Set<string>;
@@ -44,8 +43,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
   onUnpackComposite,
   onUpdateState,
   onUpdateLabel,
-  onPortMouseDown,
-  onPortMouseUp,
+  onPortPointerDown,
   onPortActivate,
   connectedPorts,
   dragWireTargetHover,
@@ -232,8 +230,7 @@ export const NodeView: React.FC<NodeViewProps> = ({
           customTypes={customTypes}
           connectedPorts={connectedPorts}
           dragWireTargetHover={dragWireTargetHover}
-          onPortMouseDown={onPortMouseDown}
-          onPortMouseUp={onPortMouseUp}
+          onPortPointerDown={onPortPointerDown}
           onPortActivate={onPortActivate}
         />
 

@@ -23,9 +23,15 @@ ModuLoom は、純粋関数をノードとして組み合わせ、型付きの�
 
 - Node.js 24 を推奨
 - npm
-- モダンブラウザ（Chrome、Edge、Firefox、Safari の現行版を想定）
+- デスクトップ版 Chrome／Edge／Firefox／Safari の最新2メジャーバージョン
+- 編集時のviewportは 768×600px 以上（1024×700px 以上を推奨）
 
 `package.json` では Node.js 24以上、npm 11以上を指定し、CI も Node.js 24を使用します。
+
+Chromium、Firefox、WebKitの主要フローをPlaywrightで継続検証します。マウス、ペン、1本指
+タッチでノード移動と配線ができ、空白部分のタッチドラッグはキャンバス移動になります。
+幅768px未満のスマートフォンは閲覧を想定し、編集操作はサポート対象外です。詳細は
+[既知の制約](documents/known-limitations.md)を参照してください。
 
 ## セットアップ
 

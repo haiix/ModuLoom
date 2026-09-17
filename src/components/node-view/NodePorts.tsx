@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react';
+import type { PointerEvent } from 'react';
 
 import { formatValue } from '../../engine/typeSystem';
 import {
@@ -16,8 +16,7 @@ interface NodePortsProps {
   customTypes: CustomTypeDefinition[];
   connectedPorts: { inputs: Set<string>; outputs: Set<string> };
   dragWireTargetHover?: { nodeId: string; portId: string; isCompatible: boolean } | null;
-  onPortMouseDown: (event: MouseEvent, portId: string, isOutput: boolean) => void;
-  onPortMouseUp: (event: MouseEvent, portId: string, isOutput: boolean) => void;
+  onPortPointerDown: (event: PointerEvent, portId: string, isOutput: boolean) => void;
   onPortActivate?: (portId: string, isOutput: boolean) => void;
 }
 
@@ -28,8 +27,7 @@ export function NodePorts({
   customTypes,
   connectedPorts,
   dragWireTargetHover,
-  onPortMouseDown,
-  onPortMouseUp,
+  onPortPointerDown,
   onPortActivate,
 }: NodePortsProps) {
   return (
@@ -92,17 +90,9 @@ export function NodePorts({
                       data-port-node-id={node.id}
                       data-port-id={port.id}
                       data-port-direction="in"
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.stopPropagation();
-                        onPortMouseDown(e, port.id, false);
-                      }}
-                      onMouseUp={(e) => {
-                        e.stopPropagation();
-                        onPortMouseUp(e, port.id, false);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPortActivate?.(port.id, false);
+                        onPortPointerDown(e, port.id, false);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -111,7 +101,7 @@ export function NodePorts({
                           onPortActivate?.(port.id, false);
                         }
                       }}
-                      className={`w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-transform hover:scale-125 -ml-4.5 bg-white dark:bg-slate-900 shrink-0 ${
+                      className={`relative after:absolute after:-inset-3 w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-transform hover:scale-125 -ml-4.5 bg-white dark:bg-slate-900 shrink-0 ${
                         isHoveredCompatible
                           ? 'ring-4 ring-emerald-400 scale-125'
                           : isHoveredIncompatible
@@ -199,17 +189,9 @@ export function NodePorts({
                       data-port-node-id={node.id}
                       data-port-id={port.id}
                       data-port-direction="out"
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.stopPropagation();
-                        onPortMouseDown(e, port.id, true);
-                      }}
-                      onMouseUp={(e) => {
-                        e.stopPropagation();
-                        onPortMouseUp(e, port.id, true);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPortActivate?.(port.id, true);
+                        onPortPointerDown(e, port.id, true);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -218,7 +200,7 @@ export function NodePorts({
                           onPortActivate?.(port.id, true);
                         }
                       }}
-                      className="w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-transform hover:scale-125 -mr-4.5 bg-white dark:bg-slate-900 shrink-0"
+                      className="relative after:absolute after:-inset-3 w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-transform hover:scale-125 -mr-4.5 bg-white dark:bg-slate-900 shrink-0"
                       style={{
                         borderColor: portColor,
                         backgroundColor: isConnected ? portColor : undefined,
