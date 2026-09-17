@@ -455,6 +455,110 @@ test('診断を選ぶと対象ノードを選択して画面内へ移動する',
   expect(nodeBox!.y + nodeBox!.height).toBeLessThanOrEqual(viewport!.height);
 });
 
+test('複合ノード内部へドリルダウンし階層ブレークポイントを再利用する', async ({ page }) => {
+  const compositeDefinition = {
+    typeId: 'composite/passthrough',
+    label: 'Passthrough Composite',
+    category: 'Composite',
+    kind: 'pure',
+    inputs: [{ id: 'value', name: 'value', type: 'number' }],
+    outputs: [{ id: 'result', name: 'result', type: 'number' }],
+    isComposite: true,
+    compositeSubgraph: {
+      nodes: [
+        {
+          id: 'inner-input',
+          typeId: 'composite/input-port',
+          x: 0,
+          y: 0,
+          state: { portName: 'value', portType: 'number', testValue: 0 },
+        },
+        {
+          id: 'inner-output',
+          typeId: 'composite/output-port',
+          x: 200,
+          y: 0,
+          state: { portName: 'result', portType: 'number' },
+        },
+      ],
+      connections: [
+        {
+          id: 'inner-pass',
+          fromNodeId: 'inner-input',
+          fromPortId: 'out',
+          toNodeId: 'inner-output',
+          toPortId: 'in',
+        },
+      ],
+      inputNodeIds: ['inner-input'],
+      outputNodeIds: ['inner-output'],
+      inputPortMappings: [{ externalPortId: 'value', internalNodeId: 'inner-input' }],
+      outputPortMappings: [{ externalPortId: 'result', internalNodeId: 'inner-output' }],
+    },
+  };
+  await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'composite-debugger.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        version: '1.1.0',
+        appName: 'Composite debugger',
+        exportedAt: '2026-09-17T00:00:00.000Z',
+        nodes: [
+          { id: 'source', typeId: 'input/number', x: 0, y: 0, state: { value: 7 } },
+          { id: 'composite', typeId: compositeDefinition.typeId, x: 250, y: 0 },
+          { id: 'output', typeId: 'output/inspector', x: 500, y: 0 },
+        ],
+        connections: [
+          {
+            id: 'source-composite',
+            fromNodeId: 'source',
+            fromPortId: 'value',
+            toNodeId: 'composite',
+            toPortId: 'value',
+          },
+          {
+            id: 'composite-output',
+            fromNodeId: 'composite',
+            fromPortId: 'result',
+            toNodeId: 'output',
+            toPortId: 'value',
+          },
+        ],
+        customTypes: [],
+        customDefinitions: [compositeDefinition],
+      }),
+    ),
+  });
+  await page.getByRole('button', { name: 'キャンバスに復元' }).click();
+
+  await page.getByRole('button', { name: 'その他の操作' }).click();
+  await page.getByRole('menuitem', { name: 'DAG実行デバッガーを表示' }).click();
+  await page.getByRole('button', { name: '開始' }).click();
+  await page.getByRole('button', { name: '続行' }).click();
+  await expect(page.getByText(/完了 · 3 ノード/)).toBeVisible();
+
+  await page.getByRole('button', { name: /Passthrough Composite.*completed/ }).click();
+  await page.getByRole('button', { name: '内部トレースを表示' }).click();
+  await expect(page.getByText('公開ポート対応:')).toBeVisible();
+  await expect(page.getByText(/入力 value ↔ Group Input value \(inner-input\)/)).toBeVisible();
+  await expect(page.getByText(/出力 result ↔ Group Output result \(inner-output\)/)).toBeVisible();
+
+  const internalBreakpoint = page.getByRole('checkbox', {
+    name: 'Group Inputのブレークポイント',
+  });
+  await internalBreakpoint.click();
+  await expect(internalBreakpoint).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: '親グラフ' }).click();
+  await page.getByRole('button', { name: '再開始' }).click();
+  await page.getByRole('button', { name: '続行' }).click();
+  await expect(page.getByText(/ノード直前で一時停止 · 2 ノード/)).toBeVisible();
+  await expect(internalBreakpoint).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: '1ノード実行' }).click();
+  await expect(page.getByRole('button', { name: /1 Group Input completed/ })).toBeVisible();
+});
+
 test('破損JSONと未対応project versionを部分適用せず拒否する', async ({ page }) => {
   await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
