@@ -24,10 +24,10 @@ npm run test:e2e
 `lint` は ESLint、`typecheck` は `tsc --noEmit`、`test` は Vitest、`test:e2e` は
 Playwrightを実行します。コミット前には `npm run format:check` も実行してください。
 
-初回のE2Eテスト実行前にChromiumをインストールします。
+初回のE2Eテスト実行前に対象ブラウザをインストールします。
 
 ```bash
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 ```
 
 対話的にテストを作成・調査する場合は `npm run test:e2e:ui` を使用してください。
@@ -168,15 +168,17 @@ npm run test:watch
 
 `e2e/` のPlaywrightテストは、ReactコンポーネントとブラウザAPIをまたぐ重要な利用者フローを検証します。評価ロジックの網羅は高速なVitestへ残し、E2Eで同じ入力組み合わせを重複して検証しません。Vitestの対象は `tests/`、Playwrightの対象は `e2e/` に分離します。
 
-初期対象は次のスモークテストです。
+主要対象は次のスモークテストです。
 
 - アプリが空のキャンバスと主要操作を表示できる
 - サンプルギャラリーからサンプルを開き、グラフを実行して結果を確認できる
+- ノード移動とポート間のドラッグ接続がPointer Eventsで動作する
+- タッチでパン、ノード移動、ポート接続ができる
 - グラフ編集を元に戻し、やり直せる
 
-今後は不具合リスクと回帰実績に応じて、ポート間のドラッグ接続、JSON保存・読込、カスタムノード作成を追加します。表示文言や細かな見た目だけを固定するテストは避け、利用者が認識できるrole・labelを優先します。キャンバス上の座標操作など、それだけでは安定して特定できない要素に限り `data-testid` または既存の `data-node-id` を使用してください。
+表示文言や細かな見た目だけを固定するテストは避け、利用者が認識できるrole・labelを優先します。キャンバス上の座標操作など、それだけでは安定して特定できない要素に限り `data-testid` または既存の `data-node-id` を使用してください。
 
-CIとローカルの既定ブラウザはChromiumのみです。ブラウザ固有の不具合が判明するまではFirefox・WebKitを常時実行せず、実行時間と保守コストを抑えます。CIで失敗した場合はHTMLレポートとtraceを `playwright-report` 成果物から確認できます。スクリーンショットとtraceは初回の再試行時に保存されます。
+Chromiumでは全E2Eを実行し、FirefoxとWebKitでは評価、ノード移動、配線の主要スモークを実行します。タッチ入力はChromium DevTools Protocolで実ポインタイベントを注入して検証します。CIで失敗した場合はHTMLレポートとtraceを `playwright-report` 成果物から確認できます。スクリーンショットとtraceは初回の再試行時に保存されます。
 
 今後の推奨テスト範囲:
 
