@@ -412,6 +412,49 @@ test('JSONダウンロードしたプロジェクトを読み込んで既存内�
   await expect(page.locator('[data-node-id="n-txt-name"]')).toHaveCount(0);
 });
 
+test('診断を選ぶと対象ノードを選択して画面内へ移動する', async ({ page }) => {
+  await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'diagnostics.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        version: '1.1.0',
+        appName: 'Diagnostics test',
+        exportedAt: '2026-09-17T00:00:00.000Z',
+        nodes: [
+          {
+            id: 'offscreen-input',
+            typeId: 'input/number',
+            x: 5000,
+            y: 5000,
+            state: { value: 1 },
+          },
+        ],
+        connections: [],
+        customTypes: [],
+        customDefinitions: [],
+        viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+      }),
+    ),
+  });
+  await page.getByRole('button', { name: 'キャンバスに復元' }).click();
+
+  const diagnostics = page.getByRole('complementary', { name: 'グラフ診断' });
+  await diagnostics.getByRole('button', { name: /グラフ診断/ }).click();
+  await diagnostics.getByRole('button', { name: /出力結果に寄与していません/ }).click();
+
+  await expect(page.getByRole('toolbar', { name: '選択ノード操作' })).toContainText('1件選択');
+  const nodeBox = await page.locator('[data-node-id="offscreen-input"]').boundingBox();
+  const viewport = page.viewportSize();
+  expect(nodeBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(nodeBox!.x).toBeGreaterThanOrEqual(0);
+  expect(nodeBox!.x + nodeBox!.width).toBeLessThanOrEqual(viewport!.width);
+  expect(nodeBox!.y).toBeGreaterThanOrEqual(0);
+  expect(nodeBox!.y + nodeBox!.height).toBeLessThanOrEqual(viewport!.height);
+});
+
 test('破損JSONと未対応project versionを部分適用せず拒否する', async ({ page }) => {
   await openPreset(page, 'math-calc');
   await page.getByRole('button', { name: 'プロジェクトを読み込み' }).click();

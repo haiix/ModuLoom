@@ -845,6 +845,10 @@ export class CodeGenerationError extends Error {
   }
 }
 
+export function hasNodeCodeGenerationImplementation(definition: NodeDefinition): boolean {
+  return Boolean(definition.codegen || definition.customCode);
+}
+
 function expandCompositeNodes(
   nodes: NodeInstance[],
   connections: Connection[],
@@ -902,7 +906,7 @@ export function generateTypeScriptCode(
     if (!definition) {
       throw new CodeGenerationError(`未登録のノード定義: ${node.typeId}`);
     }
-    if (!definition.codegen && !definition.customCode) {
+    if (!hasNodeCodeGenerationImplementation(definition)) {
       throw new CodeGenerationError(
         `ノード '${definition.label}' (${definition.typeId}) はTypeScript出力に対応していません。`,
       );

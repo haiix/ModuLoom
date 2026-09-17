@@ -126,6 +126,9 @@ npm run preview
 接続時の型互換性は `src/engine/typeSystem.ts` の `isTypeCompatible`、循環チェックは `src/engine/dagEngine.ts` の `wouldCreateCycle` にあります。
 
 UIだけでなく、`src/engine/projectFormat.ts` の外部JSON検証も同じ接続ルールへ更新してください。
+`graphDiagnostics.ts` も `isTypeCompatible` と `getTopologicalOrder` を再利用しています。必須入力、
+型、循環、コード生成条件を変更した場合は診断結果と `tests/graphDiagnostics.test.ts` を同時に
+更新してください。診断関数は入力グラフを変更せず、UI状態やReactへ依存させません。
 
 ## 評価エンジンを変更する
 
