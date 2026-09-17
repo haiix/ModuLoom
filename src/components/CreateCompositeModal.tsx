@@ -378,7 +378,7 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                                 className="text-[10px] px-1.5 py-0.2 rounded font-medium"
                                 style={{ backgroundColor: style.bgColor, color: style.color }}
                               >
-                                {port.type}
+                                {style.label}
                               </span>
                             </div>
                           );
@@ -449,7 +449,7 @@ export const CreateCompositeModal: React.FC<CreateCompositeModalProps> = ({
                               className="text-[10px] px-1.5 py-0.2 rounded font-medium"
                               style={{ backgroundColor: style.bgColor, color: style.color }}
                             >
-                              {port.type}
+                              {style.label}
                             </span>
                           </div>
                         );

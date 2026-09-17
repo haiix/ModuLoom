@@ -1,5 +1,6 @@
 import { CustomTypeDefinition, NodeDefinition } from '../types';
 import { isValueCompatibleWithType } from '../engine/typeSystem';
+import { getTypeRefBaseName } from '../typeRef';
 
 /**
  * Generates Constructor, Deconstructor, and Validator pure function nodes for a given custom type definition.
@@ -20,15 +21,18 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     defaultValue:
       f.defaultValue !== undefined
         ? JSON.parse(JSON.stringify(f.defaultValue))
-        : f.type === 'number'
+        : getTypeRefBaseName(f.type) === 'number'
           ? 0
-          : f.type === 'string'
+          : getTypeRefBaseName(f.type) === 'string'
             ? ''
-            : f.type === 'boolean'
+            : getTypeRefBaseName(f.type) === 'boolean'
               ? false
-              : f.type === 'array'
+              : getTypeRefBaseName(f.type) === 'array'
                 ? []
-                : {},
+                : getTypeRefBaseName(f.type) === 'object' ||
+                    !['promise', 'stream', 'unknown'].includes(getTypeRefBaseName(f.type))
+                  ? {}
+                  : undefined,
   }));
 
   // 1. Constructor Node: takes each field as input -> outputs the custom object
@@ -43,7 +47,9 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
       id: f.name,
       name: f.name,
       type: f.type,
-      defaultValue: JSON.parse(JSON.stringify(f.defaultValue)),
+      ...(f.defaultValue === undefined
+        ? { required: true }
+        : { defaultValue: JSON.parse(JSON.stringify(f.defaultValue)) }),
     })),
     outputs: [
       {
@@ -139,7 +145,7 @@ export function generateNodesForCustomType(customType: CustomTypeDefinition): No
     },
     codegen: {
       emit: ({ inputsVar }) =>
-        `(() => { const data = ${inputsVar}.data; if (!data || typeof data !== 'object' || Array.isArray(data)) return { isValid: false, instance: null }; const matchesType = (value: any, type: string) => type === 'any' ? value !== undefined : type === 'number' ? typeof value === 'number' && Number.isFinite(value) : type === 'string' ? typeof value === 'string' : type === 'boolean' ? typeof value === 'boolean' : type === 'array' ? Array.isArray(value) : type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value) : type === 'promise' ? Boolean(value && typeof value.then === 'function') : type === 'stream' ? Boolean(value && typeof value[Symbol.asyncIterator] === 'function') : value !== null && typeof value === 'object' && !Array.isArray(value); const isValid = ${JSON.stringify(fields)}.every(field => { const value = data[field.name]; return value === undefined || value === null ? !field.required : matchesType(value, field.type); }); return { isValid, instance: isValid ? JSON.parse(JSON.stringify(data)) : null }; })()`,
+        `(() => { const data = ${inputsVar}.data; if (!data || typeof data !== 'object' || Array.isArray(data)) return { isValid: false, instance: null }; const matchesType = (value: any, type: string): boolean => { const match = /^\\s*([^<\\s]+)(?:\\s*<(.+)>)?\\s*$/.exec(type); const name = (match?.[1] || 'unknown').toLowerCase(); const argument = match?.[2] || 'any'; if (name === 'any') return value !== undefined; if (name === 'unknown') return true; if (name === 'number') return typeof value === 'number' && Number.isFinite(value); if (name === 'string') return typeof value === 'string'; if (name === 'boolean') return typeof value === 'boolean'; if (name === 'array') return Array.isArray(value) && value.every(item => matchesType(item, argument)); if (name === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value); if (name === 'promise') return Boolean(value && typeof value.then === 'function'); if (name === 'stream') return Boolean(value && typeof value[Symbol.asyncIterator] === 'function'); return value !== null && typeof value === 'object' && !Array.isArray(value); }; const isValid = ${JSON.stringify(fields)}.every(field => { const value = data[field.name]; return value === undefined || value === null ? !field.required : matchesType(value, field.type); }); return { isValid, instance: isValid ? JSON.parse(JSON.stringify(data)) : null }; })()`,
     },
   };
 

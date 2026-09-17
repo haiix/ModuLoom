@@ -79,7 +79,7 @@ export const INPUT_NODES: NodeDefinition[] = [
     kind: 'input',
     description: '数値または文字の配列リテラルを入力するノード',
     inputs: [],
-    outputs: [{ id: 'value', name: 'value', type: 'array', defaultValue: [1, 2, 3, 4, 5] }],
+    outputs: [{ id: 'value', name: 'value', type: 'array<any>', defaultValue: [1, 2, 3, 4, 5] }],
     defaultState: { rawText: '', type: 'number' },
     evaluate: (_inputs, state) => {
       const raw = String(state?.rawText ?? '');

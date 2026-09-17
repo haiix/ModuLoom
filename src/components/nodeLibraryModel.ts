@@ -1,5 +1,5 @@
 import type { CustomTypeDefinition, DataType, NodeDefinition } from '../types';
-import { isTypeCompatible } from '../engine/typeSystem';
+import { areTypesEquivalent, isTypeCompatible } from '../engine/typeSystem';
 import { getNodeCatalogSection } from '../nodes/nodeCatalog';
 
 export interface SelectedPort {
@@ -55,5 +55,5 @@ export function getCompatibleDefinitions(
 
 function hasExactPort(definition: NodeDefinition, selectedPort: SelectedPort): boolean {
   const ports = selectedPort.direction === 'output' ? definition.inputs : definition.outputs;
-  return ports.some((port) => port.type === selectedPort.type);
+  return ports.some((port) => areTypesEquivalent(port.type, selectedPort.type));
 }

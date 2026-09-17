@@ -19,8 +19,9 @@
 | `INPUT_CONSTRAINT` | `integer`、`min`、`max`、`nonEmpty` 制約に違反した |
 | `DOMAIN_ERROR`     | ノード固有の定義域外。ゼロ除算や負数の平方根など   |
 
-`object` は `null` と配列以外のオブジェクト、`promise` は `then` を持つ値、`stream` は
-`Symbol.asyncIterator` を持つ値です。`any` は `undefined` を除く任意の値を受理します。
+`object` は `null` と配列以外のオブジェクト、`promise<T>` は `then` を持つ値、`stream<T>` は
+`Symbol.asyncIterator` を持つ値です。`array<T>` は各要素を再帰的に検査します。`any` は
+`undefined` を除く任意の値、`unknown` は検査境界で任意の値を受理します。
 
 カスタム定義を含むプロジェクトは `1.1.0` で保存します。`1.0.0` は読み込み時に移行します。
 旧定義で `defaultValue` がある入力は任意、ない入力は必須として扱います。
@@ -81,8 +82,8 @@
 | `array/length`          | Array Length        | `arr`            | —                | 要素数                                              |
 | `array/get`             | Get Item            | `arr`, `index`   | —                | 負数は末尾基準。範囲外は `DOMAIN_ERROR`             |
 | `array/join`            | Array Join          | `arr`            | `separator=", "` | `Array.join`                                        |
-| `array/map`             | Map Numbers         | `arr`            | `factor=2`       | 非数値要素は維持。除算の係数0は `DOMAIN_ERROR`      |
-| `array/filter`          | Filter Numbers      | `arr`            | `threshold=0`    | 非数値要素を除外。厳密比較記号も受理                |
+| `array/map`             | Map Numbers         | `arr`            | `factor=2`       | `array<number>`を変換。除数0は `DOMAIN_ERROR`       |
+| `array/filter`          | Filter Numbers      | `arr`            | `threshold=0`    | `array<number>`を抽出。厳密比較記号も受理           |
 | `array/slice`           | Array Slice         | `arr`, `end`     | `start=0`        | `Array.slice`                                       |
 | `array/reverse`         | Array Reverse       | `arr`            | —                | 入力を変更せず反転                                  |
 | `array/sum`             | Sum Numbers         | `arr`            | —                | 非有限数または非数値要素は `INPUT_TYPE`             |
@@ -109,8 +110,8 @@
 | `async/fetch`           | Simulated API Response | `endpoint` | `latency=500`               | ネットワーク通信をせず応答を生成                    |
 | `stream/interval`       | Interval Stream        | —          | `intervalMs=400`, `limit=8` | 0から連番を送出。間隔は20ms以上、limitは1以上へ補正 |
 | `stream/from_array`     | Array Stream           | `items`    | `delayMs=300`               | 配列要素を順に送出                                  |
-| `stream/map`            | Map Stream             | `stream`   | `multiplier=2`              | Stream以外は `INPUT_TYPE`。非数値要素は維持         |
-| `stream/filter`         | Filter Stream          | `stream`   | `threshold=0`               | Stream以外は `INPUT_TYPE`。非数値要素は除外         |
+| `stream/map`            | Map Stream             | `stream`   | `multiplier=2`              | `stream<number>`を変換                              |
+| `stream/filter`         | Filter Stream          | `stream`   | `threshold=0`               | `stream<number>`を抽出                              |
 | `stream/take`           | Take Stream            | `stream`   | `count=4`                   | Stream以外は `INPUT_TYPE`。countは1以上へ補正       |
 | `stream/collect`        | Collect Stream         | `stream`   | —                           | Stream以外は `INPUT_TYPE`。最大50件を収集           |
 | `composite/input-port`  | Group Input            | `in`       | —                           | 通常グラフでは `testValue` を試験値として使える     |

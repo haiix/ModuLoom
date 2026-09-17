@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { BuiltinDataType, CustomTypeDefinition, CustomTypeField } from '../types';
+import { CustomTypeDefinition, CustomTypeField, DataType } from '../types';
 import { X, Plus, Trash2, Boxes, Check, AlertCircle, Code2, Edit3, Copy } from 'lucide-react';
+import { findCustomTypeCycle, mapDataTypeToTypeScript } from '../engine/typeSystem';
+import { getTypeRefBaseName, isKnownTypeRef } from '../typeRef';
 
 interface CustomTypeModalProps {
   isOpen: boolean;
@@ -138,11 +140,15 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
         const updated = { ...f, [key]: val };
         // If type changed, provide a reasonable default value
         if (key === 'type') {
-          if (val === 'number') updated.defaultValue = 0;
-          else if (val === 'string') updated.defaultValue = '';
-          else if (val === 'boolean') updated.defaultValue = true;
-          else if (val === 'array') updated.defaultValue = [];
-          else if (val === 'object') updated.defaultValue = {};
+          const baseType = getTypeRefBaseName(String(val));
+          if (baseType === 'number') updated.defaultValue = 0;
+          else if (baseType === 'string') updated.defaultValue = '';
+          else if (baseType === 'boolean') updated.defaultValue = true;
+          else if (baseType === 'array') updated.defaultValue = [];
+          else if (baseType === 'object') updated.defaultValue = {};
+          else if (baseType === 'promise' || baseType === 'stream') {
+            updated.defaultValue = undefined;
+          }
         }
         return updated;
       });
@@ -185,7 +191,7 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
         if (f.type === 'number') defVal = 0;
         else if (f.type === 'string') defVal = '';
         else if (f.type === 'boolean') defVal = false;
-        else if (f.type === 'array') defVal = [];
+        else if (getTypeRefBaseName(f.type) === 'array') defVal = [];
         else if (f.type === 'object') defVal = {};
       }
       return {
@@ -205,6 +211,23 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
       description: description.trim(),
       fields: clonedFields,
     };
+
+    const candidateTypes = editingTypeId
+      ? customTypes.map((type) => (type.id === editingTypeId ? newType : type))
+      : [...customTypes, newType];
+    const knownNames = candidateTypes.flatMap(({ id, name }) => [id, name]);
+    const invalidField = clonedFields.find((field) => !isKnownTypeRef(field.type, knownNames));
+    if (invalidField) {
+      setError(
+        `フィールド '${invalidField.name}' の型 '${invalidField.type}' は未登録または不正です`,
+      );
+      return;
+    }
+    const cycle = findCustomTypeCycle(candidateTypes);
+    if (cycle) {
+      setError(`カスタム型の循環参照は作成できません: ${cycle.join(' -> ')}`);
+      return;
+    }
 
     onSaveType(newType, autoAddConstructor);
     resetFormToNew();
@@ -367,17 +390,30 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
 
                       <select
                         value={f.type}
-                        onChange={(e) =>
-                          handleFieldChange(idx, 'type', e.target.value as BuiltinDataType)
-                        }
+                        onChange={(e) => handleFieldChange(idx, 'type', e.target.value as DataType)}
                         className="px-2 py-1 text-xs rounded border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono"
                       >
                         <option value="number">number</option>
                         <option value="string">string</option>
                         <option value="boolean">boolean</option>
-                        <option value="array">array</option>
+                        <option value="array">array (legacy)</option>
+                        <option value="array<any>">Array&lt;any&gt;</option>
+                        <option value="array<number>">Array&lt;number&gt;</option>
+                        <option value="array<string>">Array&lt;string&gt;</option>
+                        <option value="array<boolean>">Array&lt;boolean&gt;</option>
                         <option value="object">object</option>
+                        <option value="promise<any>">Promise&lt;any&gt;</option>
+                        <option value="stream<any>">Stream&lt;any&gt;</option>
                         <option value="any">any</option>
+                        <option value="unknown">unknown</option>
+                        {customTypes
+                          .filter((type) => type.id !== editingTypeId)
+                          .map((type) => (
+                            <React.Fragment key={type.id}>
+                              <option value={type.id}>{type.name}</option>
+                              <option value={`array<${type.id}>`}>Array&lt;{type.name}&gt;</option>
+                            </React.Fragment>
+                          ))}
                       </select>
 
                       <label className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer shrink-0">
@@ -473,9 +509,10 @@ export const CustomTypeModal: React.FC<CustomTypeModalProps> = ({
 ${fields
   .map(
     (f) =>
-      `  ${f.name || 'field'}${f.required ? '' : '?'}: ${
-        f.type === 'array' ? 'any[]' : f.type === 'object' ? 'Record<string, any>' : f.type
-      };`,
+      `  ${f.name || 'field'}${f.required ? '' : '?'}: ${mapDataTypeToTypeScript(
+        f.type,
+        customTypes,
+      )};`,
   )
   .join('\n')}
 }`}

@@ -102,7 +102,7 @@ interface CustomTypeDefinition {
   catalogSource?: 'example' | 'project';
   fields: Array<{
     name: string;
-    type: BuiltinDataType;
+    type: DataType;
     required?: boolean;
     defaultValue?: unknown;
   }>;
@@ -112,6 +112,12 @@ interface CustomTypeDefinition {
 読み込み後、各カスタム型から Constructor／Deconstruct／Validate の3ノードが動的に生成されます。
 `catalogSource` はノードライブラリの Examples / Project 分類を保持する任意項目です。省略された
 旧ファイルのカスタム型は Project として扱います。
+
+`DataType` は組み込み型または登録済みカスタム型の文字列です。`array<T>`、`promise<T>`、
+`stream<T>` は1個の型引数を持て、ネストもできます。旧来の裸の `array`、`promise`、`stream` は
+`<any>` として解釈しますが保存値は維持します。未知型、不正な型引数数、カスタム型の直接・間接循環は
+読み込み時に拒否します。この拡張は既存文字列形式と後方互換なので、project versionは `1.1.0` の
+ままで移行処理を追加しません。詳細は[型システム設計](./type-system.md)を参照してください。
 
 ## customDefinitions
 

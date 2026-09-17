@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { getTopologicalOrder, hasNodeCodeGenerationImplementation } from './dagEngine';
 import { isTypeCompatible } from './typeSystem';
+import { getTypeRefBaseName } from '../typeRef';
 
 export type GraphDiagnosticSeverity = 'error' | 'warning' | 'info';
 
@@ -99,7 +100,7 @@ export function analyzeGraph(
         nodeId: toNode.id,
         connectionId: connection.id,
       });
-    } else if (fromType === 'any' && toType !== 'any') {
+    } else if (getTypeRefBaseName(fromType) === 'any' && getTypeRefBaseName(toType) !== 'any') {
       diagnostics.push({
         id: `any-boundary:${connection.id}`,
         code: 'any-boundary',

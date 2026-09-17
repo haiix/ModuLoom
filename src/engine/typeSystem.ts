@@ -1,54 +1,175 @@
-import { DataType, CustomTypeDefinition } from '../types';
+import type { CustomTypeDefinition, DataType } from '../types';
+import {
+  collectTypeRefNames,
+  getTypeRefBaseName,
+  normalizeTypeRef,
+  serializeTypeRef,
+  type TypeLike,
+  type TypeRef,
+} from '../typeRef';
 
-/**
- * Checks if output type can be legally connected to input type.
- * Rule from specification:
- * OutputPort.type === InputPort.type または InputPort.type === 'any' または OutputPort.type === 'any'
- * さらに、カスタムオブジェクト型から汎用 'object' 型への接続も許可します。
- */
-export function isTypeCompatible(
-  fromType: DataType,
-  toType: DataType,
+function resolveCustomType(
+  name: string,
+  customTypes: CustomTypeDefinition[],
+): CustomTypeDefinition | undefined {
+  return customTypes.find((candidate) => candidate.id === name || candidate.name === name);
+}
+
+export function getCustomTypeDependencies(
+  customType: CustomTypeDefinition,
+  customTypes: CustomTypeDefinition[],
+): string[] {
+  const dependencies = new Set<string>();
+  for (const field of customType.fields) {
+    for (const name of collectTypeRefNames(field.type)) {
+      const referenced = resolveCustomType(name, customTypes);
+      if (referenced) dependencies.add(referenced.id);
+    }
+  }
+  return [...dependencies];
+}
+
+export function findCustomTypeCycle(customTypes: CustomTypeDefinition[]): string[] | null {
+  const visited = new Set<string>();
+  const active = new Set<string>();
+  const stack: string[] = [];
+
+  const visit = (id: string): string[] | null => {
+    if (active.has(id)) return [...stack.slice(stack.indexOf(id)), id];
+    if (visited.has(id)) return null;
+    visited.add(id);
+    active.add(id);
+    stack.push(id);
+    const customType = customTypes.find((candidate) => candidate.id === id);
+    for (const dependency of customType ? getCustomTypeDependencies(customType, customTypes) : []) {
+      const cycle = visit(dependency);
+      if (cycle) return cycle;
+    }
+    stack.pop();
+    active.delete(id);
+    return null;
+  };
+
+  for (const customType of customTypes) {
+    const cycle = visit(customType.id);
+    if (cycle) return cycle;
+  }
+  return null;
+}
+
+export function getCustomTypeDependents(
+  typeId: string,
+  customTypes: CustomTypeDefinition[],
+): CustomTypeDefinition[] {
+  return customTypes.filter(
+    (customType) =>
+      customType.id !== typeId &&
+      getCustomTypeDependencies(customType, customTypes).includes(typeId),
+  );
+}
+
+function isRefCompatible(
+  from: TypeRef,
+  to: TypeRef,
   customTypes?: CustomTypeDefinition[],
 ): boolean {
-  if (fromType === 'any' || toType === 'any') {
-    return true;
-  }
-  // If destination is generic object and source is a custom structured type
+  if (from.name === 'any' || to.name === 'any') return true;
+  if (to.name === 'unknown') return true;
+  if (from.name === 'unknown') return to.name === 'unknown';
   if (
-    toType === 'object' &&
-    customTypes?.some((ct) => ct.id === fromType || ct.name === fromType)
+    to.name === 'object' &&
+    customTypes?.some((customType) => customType.id === from.name || customType.name === from.name)
   ) {
     return true;
   }
-  return fromType === toType;
+  if (from.name !== to.name || from.arguments.length !== to.arguments.length) return false;
+  return from.arguments.every((argument, index) =>
+    isRefCompatible(argument, to.arguments[index], customTypes),
+  );
 }
 
-/** Checks a runtime value against the flat type contract used by ports and custom fields. */
-export function isValueCompatibleWithType(value: unknown, type: DataType): boolean {
-  if (type === 'any') return value !== undefined;
-  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
-  if (type === 'string') return typeof value === 'string';
-  if (type === 'boolean') return typeof value === 'boolean';
-  if (type === 'array') return Array.isArray(value);
-  if (type === 'object')
+/** Checks whether a value flowing from one port may be assigned to the destination port. */
+export function isTypeCompatible(
+  fromType: TypeLike,
+  toType: TypeLike,
+  customTypes?: CustomTypeDefinition[],
+): boolean {
+  return isRefCompatible(normalizeTypeRef(fromType), normalizeTypeRef(toType), customTypes);
+}
+
+export function areTypesEquivalent(left: TypeLike, right: TypeLike): boolean {
+  return serializeTypeRef(left) === serializeTypeRef(right);
+}
+
+/** Checks a runtime value recursively against a port or custom-field type contract. */
+export function isValueCompatibleWithType(value: unknown, type: TypeLike): boolean {
+  const ref = normalizeTypeRef(type);
+  if (ref.name === 'any') return value !== undefined;
+  if (ref.name === 'unknown') return true;
+  if (ref.name === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (ref.name === 'string') return typeof value === 'string';
+  if (ref.name === 'boolean') return typeof value === 'boolean';
+  if (ref.name === 'array') {
+    return (
+      Array.isArray(value) &&
+      value.every((item) => isValueCompatibleWithType(item, ref.arguments[0] ?? 'any'))
+    );
+  }
+  if (ref.name === 'object') {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (type === 'promise') {
+  }
+  if (ref.name === 'promise') {
     return Boolean(value && typeof (value as { then?: unknown }).then === 'function');
   }
-  if (type === 'stream') {
+  if (ref.name === 'stream') {
     return Boolean(
       value &&
       typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function',
     );
   }
-  // Custom types are nominal for wiring but represented by plain objects at runtime.
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * Detect runtime type of a value
- */
+export function mapDataTypeToTypeScript(
+  type: TypeLike,
+  customTypes?: CustomTypeDefinition[],
+): string {
+  const ref = normalizeTypeRef(type);
+  const customType = customTypes?.find(
+    (candidate) => candidate.id === ref.name || candidate.name === ref.name,
+  );
+  if (customType) return sanitizeTypeName(customType.name);
+  const argument = () => mapDataTypeToTypeScript(ref.arguments[0] ?? 'any', customTypes);
+  switch (ref.name) {
+    case 'number':
+    case 'string':
+    case 'boolean':
+    case 'unknown':
+      return ref.name;
+    case 'array':
+      return `Array<${argument()}>`;
+    case 'object':
+      return 'Record<string, unknown>';
+    case 'promise':
+      return `Promise<${argument()}>`;
+    case 'stream':
+      return `AsyncIterable<${argument()}>`;
+    case 'any':
+    default:
+      return 'any';
+  }
+}
+
+function sanitizeTypeName(name: string): string {
+  const sanitized = name.replace(/[^a-zA-Z0-9_$]/g, '_').replace(/^([0-9])/, '_$1');
+  return sanitized || 'CustomType';
+}
+
+export function isContainerType(type: TypeLike, name: 'array' | 'promise' | 'stream'): boolean {
+  return getTypeRefBaseName(type) === name;
+}
+
+/** Detects the outer runtime type. Element types cannot be recovered from empty containers. */
 export function detectValueType(value: any): DataType {
   if (value === null || value === undefined) return 'any';
   if (typeof value === 'object' && typeof value.then === 'function') return 'promise';
@@ -65,9 +186,6 @@ export function detectValueType(value: any): DataType {
   return 'any';
 }
 
-/**
- * Formats a value nicely for display in inspection badges and output nodes
- */
 export function formatValue(value: any, maxLen: number = 60): string {
   if (value === undefined) return 'undefined';
   if (value === null) return 'null';
